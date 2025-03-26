@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import Image from "next/image";
 import { getBases } from "./_actions/base";
 import type { Base } from "./_types/base";
 
@@ -16,7 +17,7 @@ export default async function HomePage() {
   // Fetch bases for the current user
   let bases: Base[] = [];
   try {
-    bases = (await getBases()) as Base[];
+    bases = await getBases();
   } catch (error) {
     console.error("Error fetching bases:", error);
   }
@@ -46,9 +47,11 @@ export default async function HomePage() {
           </button>
 
           <Link href="/" className="flex items-center">
-            <img
+            <Image
               src="/airtable-vector-logo-2022.svg"
               alt="Airtable"
+              width={120}
+              height={28}
               className="h-28 w-auto sm:h-28"
             />
           </Link>
@@ -134,7 +137,9 @@ export default async function HomePage() {
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
           </button>
-          <UserButton />
+          <div suppressHydrationWarning>
+            <UserButton />
+          </div>
         </div>
       </header>
 
@@ -215,7 +220,7 @@ export default async function HomePage() {
             <div className="flex flex-col items-center justify-center gap-2 text-center">
               <p className="font-medium text-gray-700">No bases</p>
               <p className="text-sm text-gray-500">
-                Get started by creating a new base
+                You can get started by creating a new base!
               </p>
               <button className="mt-4 flex items-center gap-1 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700">
                 <svg
