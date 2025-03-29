@@ -151,12 +151,12 @@ export default function BasePage() {
           onClick={() =>
             setData((prev) => [
               ...prev,
-              ...Array.from({ length: 15000 }, () => generateFakeRecord()),
+              ...Array.from({ length: 10000 }, () => generateFakeRecord()),
             ])
           }
           className="text-blue-600 hover:underline"
         >
-          Add 15000 rows
+          Add 10000 rows
         </button>
       </div>
     </div>
