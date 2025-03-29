@@ -5,6 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { getBases } from "./_actions/base";
 import type { Base } from "./_types/base";
+import { CreateBaseButton } from "./_components/CreateBaseButton";
+import BaseList from "./_components/BaseList";
 
 export default async function HomePage() {
   const { userId } = await auth();
@@ -196,51 +198,35 @@ export default async function HomePage() {
         <main className="flex-1 overflow-auto bg-gray-50 p-4 sm:p-6 md:p-8">
           <div className="mb-4 flex flex-col justify-between gap-3 sm:mb-6 sm:flex-row sm:items-center sm:gap-0">
             <h1 className="text-lg font-semibold sm:text-xl">Home</h1>
-            <button className="flex w-full items-center justify-center gap-1 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 sm:w-auto sm:justify-start sm:px-4">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M5 12h14" />
-                <path d="M12 5v14" />
-              </svg>
-              <span>Create new base</span>
-            </button>
+            <CreateBaseButton></CreateBaseButton>
           </div>
 
-          {/* Empty State */}
-          <div className="rounded-lg border border-dashed border-gray-300 p-6 sm:p-8 md:p-12">
-            <div className="flex flex-col items-center justify-center gap-2 text-center">
-              <p className="font-medium text-gray-700">No bases</p>
-              <p className="text-sm text-gray-500">
-                You can get started by creating a new base!
-              </p>
-              <button className="mt-4 flex items-center gap-1 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M5 12h14" />
-                  <path d="M12 5v14" />
-                </svg>
-                Create new base
-              </button>
+          {/* Empty State
+          {bases.length === 0 && (
+            <div className="rounded-lg border border-dashed border-gray-300 p-6 sm:p-8 md:p-12">
+              <div className="flex flex-col items-center justify-center gap-2 text-center">
+                <p className="font-medium text-gray-700">No bases</p>
+                <p className="text-sm text-gray-500">
+                  You can get started by creating a new base!
+                </p>
+                <CreateBaseButton></CreateBaseButton>
+              </div>
             </div>
-          </div>
+          )} */}
+
+          {/* Display bases here when there are any */}
+          <BaseList />
+          {/* {bases.length > 0 && (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {bases.map((base) => (
+                <Link href={`/base/${base.id}`} key={base.id} className="block">
+                  <div className="rounded-lg border bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+                    <h3 className="text-lg font-medium">{base.name}</h3>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )} */}
         </main>
       </div>
     </div>

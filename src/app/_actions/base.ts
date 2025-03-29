@@ -38,24 +38,17 @@ export async function createBase(name: string) {
 export async function getBases(): Promise<Base[]> {
   const { userId } = await auth();
 
-  if (!userId) {
-    throw new Error("Unauthorized");
-  }
+  if (!userId) return [];
 
-  try {
-    // Get all bases for the current user
-    const bases = await db.base.findMany({
-      where: {
-        userId,
-      },
-      //   orderBy: {
-      //     createdAt: "desc",
-      //   },
-    });
+  const user = await db.user.findUnique({
+    where: { clerkId: userId },
+  });
 
-    return bases as Base[];
-  } catch (error) {
-    console.error("Error fetching bases:", error);
-    throw new Error("Failed to fetch bases");
-  }
+  if (!user) return [];
+
+  const bases = await db.base.findMany({
+    where: { userId: user.id },
+  });
+
+  return bases as Base[];
 }

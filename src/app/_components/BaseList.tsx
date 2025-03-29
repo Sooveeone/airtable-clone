@@ -1,92 +1,102 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import CreateBaseButton from "./CreateBaseButton";
-import type { Base } from "../_types/base";
+import { Loader2, Trash2 } from "lucide-react";
 
-type BaseListProps = {
-  bases: Base[];
-};
+interface Base {
+  id: string;
+  name: string;
+  createdAt: string;
+}
 
-export default function BaseList({ bases }: BaseListProps) {
+export function BaseList() {
+  const [bases, setBases] = useState<Base[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchBases();
+  }, []);
+
+  const fetchBases = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch("/api/bases");
+      if (!response.ok) throw new Error("Failed to fetch bases");
+      const data = await response.json();
+      setBases(data);
+    } catch (error) {
+      console.error("Error fetching bases:", error);
+      alert("Failed to load bases. Please refresh the page.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const confirmed = confirm("Are you sure you want to delete this base?");
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/bases/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete base");
+      setBases((prev) => prev.filter((base) => base.id !== id));
+    } catch (err) {
+      console.error("Error deleting base:", err);
+      alert("Could not delete base.");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <Loader2 className="text-primary h-10 w-10 animate-spin" />
+      </div>
+    );
+  }
+
   if (bases.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-12">
-        <div className="flex flex-col items-center justify-center gap-2 text-center">
-          <p className="font-medium text-gray-700">No bases</p>
-          <p className="text-sm text-gray-500">
-            Get started by creating a new base
-          </p>
-          <div className="mt-4">
-            <CreateBaseButton />
-          </div>
-        </div>
+      <div className="py-10 text-center">
+        <h3 className="text-lg font-medium">No bases found</h3>
+        <p className="text-muted-foreground mt-2">
+          Create your first base to get started
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       {bases.map((base) => (
         <Link
-          key={base.id}
           href={`/base/${base.id}`}
-          className="group flex flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-all hover:shadow-md"
+          key={base.id}
+          className="group relative flex flex-col rounded-lg border bg-white shadow-sm transition hover:border-blue-500 hover:shadow-md"
         >
-          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded bg-blue-100 text-blue-600">
-            {base.icon ? (
-              <span>{base.icon}</span>
-            ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" />
-                <path d="M3 9V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4" />
-                <line x1="3" x2="21" y1="14" y2="14" />
-              </svg>
-            )}
+          <div className="p-6">
+            <h3 className="text-lg font-medium group-hover:text-blue-600">
+              {base.name}
+            </h3>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete(base.id);
+              }}
+              className="absolute top-3 right-3 text-red-500 hover:text-red-700"
+              title="Delete base"
+            >
+              <Trash2 size={16} />
+            </button>
           </div>
-          <h3 className="font-medium text-gray-900 group-hover:text-blue-600">
-            {base.name}
-          </h3>
-          <p className="mt-1 text-xs text-gray-500">
-            Created {base.createdAt.toLocaleDateString()}
-          </p>
+          <div className="mt-auto p-6 pt-0">
+            <span className="block text-center text-sm text-gray-500">
+              Created at: {new Date(base.createdAt).toLocaleString()}
+            </span>
+          </div>
         </Link>
       ))}
-
-      {/* Create New Base Card */}
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 p-6 text-center">
-        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M5 12h14" />
-            <path d="M12 5v14" />
-          </svg>
-        </div>
-        <h3 className="font-medium text-gray-700">Create a new base</h3>
-        <p className="mt-1 text-xs text-gray-500">Start organizing your data</p>
-        <div className="mt-4">
-          <CreateBaseButton />
-        </div>
-      </div>
     </div>
   );
 }
+
+export default BaseList;

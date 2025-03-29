@@ -2,59 +2,63 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Post {
-    id        Int      @id @default(autoincrement())
-    name      String
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    @@index([name])
+  @@index([name])
 }
 
 model User {
-  id        String  @id @default(uuid())
-  email     String  @unique
+  id        String   @id @default(cuid())
+  clerkId   String?  @unique // ⬅️ Temporarily optional
+  email     String?
+  username  String?  @unique // ⬅️ Temporarily optional
+  firstName String?
+  lastName  String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
   bases     Base[]
 }
 
 model Base {
-  id        String @id @default(uuid())
+  id        String   @id @default(uuid())
   name      String
   userId    String
-  user      User @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
   tables    Table[]
 }
 
 model Table {
-  id        String @id @default(uuid())
-  name      String
-  baseId    String
-  base      Base @relation(fields: [baseId], references: [id])
-  columns   Column[]
-  rows      Row[]
+  id      String   @id @default(uuid())
+  name    String
+  baseId  String
+  base    Base     @relation(fields: [baseId], references: [id])
+  columns Column[]
+  rows    Row[]
 }
 
 model Column {
-  id        String @id @default(uuid())
-  name      String
-  type      String  // "text" or "number"
-  tableId   String
-  table     Table @relation(fields: [tableId], references: [id])
+  id      String @id @default(uuid())
+  name    String
+  type    String // "text" or "number"
+  tableId String
+  table   Table  @relation(fields: [tableId], references: [id])
 }
 
 model Row {
-  id        String @id @default(uuid())
-  tableId   String
-  table     Table @relation(fields: [tableId], references: [id])
-  data      Json
+  id      String @id @default(uuid())
+  tableId String
+  table   Table  @relation(fields: [tableId], references: [id])
+  data    Json
 }
