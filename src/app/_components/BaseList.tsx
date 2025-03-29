@@ -10,7 +10,7 @@ export function BaseList() {
 
   const deleteMutation = api.base.delete.useMutation({
     onSuccess: () => {
-      utils.base.getAll.invalidate();
+      void utils.base.getAll.invalidate();
     },
   });
 

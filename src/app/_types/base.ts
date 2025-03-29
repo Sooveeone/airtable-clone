@@ -20,5 +20,5 @@ export interface Column {
 export interface Row {
   id: string;
   tableId: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
 }

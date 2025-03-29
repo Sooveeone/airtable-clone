@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@clerk/nextjs";
+import { api } from "~/trpc/react";
 
 interface CreateBaseModalProps {
   isOpen: boolean;
@@ -11,11 +11,29 @@ interface CreateBaseModalProps {
 
 export function CreateBaseModal({ isOpen, onClose }: CreateBaseModalProps) {
   const [name, setName] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const { userId } = useAuth();
+  const utils = api.useUtils();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const createBase = api.base.create.useMutation({
+    onSuccess: (data) => {
+      // Optimistically update the cache for getAll
+      utils.base.getAll.setData(undefined, (old) => {
+        return old ? [data, ...old] : [data];
+      });
+
+      setName("");
+      onClose();
+      router.push(`/base/${data.id}`);
+    },
+    onError: (err) => {
+      console.error("Error creating base:", err);
+      alert("Failed to create base. Please try again.");
+    },
+  });
+
+  const isLoading = createBase.status === "pending";
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!name.trim()) {
@@ -23,41 +41,7 @@ export function CreateBaseModal({ isOpen, onClose }: CreateBaseModalProps) {
       return;
     }
 
-    try {
-      setIsLoading(true);
-
-      // Create the base using the API
-      const response = await fetch("/api/bases", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create base");
-      }
-
-      const data = await response.json();
-
-      // Reset form
-      setName("");
-
-      // Close modal
-      onClose();
-
-      // Refresh the data
-      router.refresh();
-
-      // Redirect to the base page
-      router.push(`/base/${data.id}`);
-    } catch (error) {
-      console.error("Error creating base:", error);
-      alert("Failed to create base. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
+    createBase.mutate({ name });
   };
 
   if (!isOpen) return null;

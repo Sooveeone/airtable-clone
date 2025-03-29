@@ -15,6 +15,9 @@ export const baseRouter = createTRPCRouter({
       where: {
         userId: user.id, // match Base.userId with User.id
       },
+      orderBy: {
+        createdAt: "desc", // sort newest first
+      },
     });
 
     return bases;
@@ -49,5 +52,24 @@ export const baseRouter = createTRPCRouter({
           id: input.baseId,
         },
       });
+    }),
+
+  create: protectedProcedure
+    .input(z.object({ name: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.db.user.findUnique({
+        where: { clerkId: ctx.auth.userId },
+      });
+
+      if (!user) throw new Error("User not found");
+
+      const newBase = await ctx.db.base.create({
+        data: {
+          name: input.name,
+          userId: user.id,
+        },
+      });
+
+      return newBase;
     }),
 });

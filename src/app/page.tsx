@@ -3,8 +3,6 @@ import { redirect } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
-import { getBases } from "./_actions/base";
-import type { Base } from "./_types/base";
 import { CreateBaseButton } from "./_components/CreateBaseButton";
 import BaseList from "./_components/BaseList";
 
@@ -16,13 +14,13 @@ export default async function HomePage() {
     redirect("/sign-in");
   }
 
-  // Fetch bases for the current user
-  let bases: Base[] = [];
-  try {
-    bases = await getBases();
-  } catch (error) {
-    console.error("Error fetching bases:", error);
-  }
+  // // Fetch bases for the current user
+  // let bases: Base[] = [];
+  // try {
+  //   bases = await getBases();
+  // } catch (error) {
+  //   console.error("Error fetching bases:", error);
+  // }
 
   return (
     <div className="flex h-screen flex-col">
@@ -216,17 +214,6 @@ export default async function HomePage() {
 
           {/* Display bases here when there are any */}
           <BaseList />
-          {/* {bases.length > 0 && (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {bases.map((base) => (
-                <Link href={`/base/${base.id}`} key={base.id} className="block">
-                  <div className="rounded-lg border bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
-                    <h3 className="text-lg font-medium">{base.name}</h3>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )} */}
         </main>
       </div>
     </div>

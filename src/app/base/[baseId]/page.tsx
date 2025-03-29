@@ -11,6 +11,13 @@ import { faker } from "@faker-js/faker";
 import { UserButton } from "@clerk/nextjs";
 import { api } from "@/trpc/react";
 
+type RecordRow = {
+  name: string;
+  notes: string;
+  assignee: string;
+  status: string;
+};
+
 const defaultColumns = [
   { accessorKey: "name", header: "Name" },
   { accessorKey: "notes", header: "Notes" },
@@ -18,7 +25,7 @@ const defaultColumns = [
   { accessorKey: "status", header: "Status" },
 ];
 
-const generateFakeRecord = () => ({
+const generateFakeRecord = (): RecordRow => ({
   name: faker.person.fullName(),
   notes: faker.lorem.sentence(),
   assignee: faker.person.firstName(),
@@ -27,7 +34,7 @@ const generateFakeRecord = () => ({
 
 export default function BasePage() {
   const { baseId } = useParams();
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<RecordRow[]>([]);
   const [columns] = useState(() => defaultColumns);
 
   const { data: base, isLoading } = api.base.getById.useQuery({
@@ -46,7 +53,7 @@ export default function BasePage() {
       <div className="flex items-center justify-between gap-6 border-b bg-gray-700 px-4 py-2 text-sm text-white shadow-sm">
         <div className="flex items-center gap-6">
           <h1 className="text-lg font-semibold">
-            {isLoading ? "Loading..." : base?.name || "Untitled Base"}
+            {isLoading ? "Loading..." : (base?.name ?? "Untitled Base")}
           </h1>
           <div className="flex gap-4">
             <button className="hover:underline">Data</button>
