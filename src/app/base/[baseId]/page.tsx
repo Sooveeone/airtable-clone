@@ -58,15 +58,19 @@ function ColumnHeader({
     <div className="relative inline-block">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1"
+        className="flex items-center gap-1 rounded px-1 py-0.5 transition-colors duration-150 hover:bg-gray-100"
+        title="Click to open options"
       >
         <span>{name.charAt(0).toUpperCase() + name.slice(1)}</span>
-        <ChevronDown size={14} className="text-gray-500" />
+        <ChevronDown
+          size={14}
+          className={`text-gray-500 transition-transform duration-150`}
+        />
       </button>
       {open && (
         <div className="absolute top-full right-0 z-10 mt-1 w-28 rounded border bg-white shadow-md">
           <button
-            className="block w-full px-3 py-2 text-left text-sm hover:bg-red-100"
+            className="block w-full cursor-pointer px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-red-100"
             onClick={() => {
               onDelete();
               setOpen(false);
