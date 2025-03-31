@@ -20,10 +20,11 @@ interface ColumnMeta {
 }
 
 // Define the record type
-type RecordRow = Record<string, string | number>;
+type RecordRow = Record<string, string | number | null>;
+type ColumnValue = string | number | null;
 
 const generateFakeRecord = (
-  columns: AccessorKeyColumnDef<RecordRow, any>[],
+  columns: AccessorKeyColumnDef<RecordRow, ColumnValue>[],
 ): RecordRow => {
   const record: RecordRow = {};
 
@@ -79,7 +80,11 @@ function ColumnHeader({
   );
 }
 
-let staticDeleteHandler: (key: string) => void = () => {};
+// Initialize with a function that does something to avoid empty function warning
+let staticDeleteHandler: (key: string) => void = (key) => {
+  console.log(`No handler registered for deleting column: ${key}`);
+};
+
 const handleDeleteColumnStatic = (key: string) => staticDeleteHandler(key);
 
 const defaultColumnsKeys = ["name", "notes", "assignee", "status"];
@@ -93,7 +98,7 @@ export default function BasePage() {
   } | null>(null);
 
   const [columns, setColumns] = useState<
-    AccessorKeyColumnDef<RecordRow, any>[]
+    AccessorKeyColumnDef<RecordRow, ColumnValue>[]
   >(
     defaultColumnsKeys.map((key) => ({
       accessorKey: key,
@@ -123,12 +128,14 @@ export default function BasePage() {
             <input
               type={typeof value === "number" ? "number" : "text"}
               className="h-full w-full border-none bg-transparent outline-none"
-              value={value === 0 && typeof value === "number" ? "" : value}
+              value={
+                value === 0 && typeof value === "number" ? "" : (value ?? "")
+              }
               onChange={(e) => {
                 const newValue =
                   typeof value === "number"
                     ? e.target.value === ""
-                      ? ""
+                      ? null
                       : Number(e.target.value)
                     : e.target.value;
                 setData((prev) => {
@@ -162,7 +169,9 @@ export default function BasePage() {
     );
     setData((prevData) =>
       prevData.map((row) => {
-        const { [name]: _, ...rest } = row;
+        // Destructure and ignore the removed field using rest operator
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { [name]: removed, ...rest } = row;
         return rest;
       }),
     );
@@ -194,7 +203,7 @@ export default function BasePage() {
       return;
     }
 
-    const columnDef: AccessorKeyColumnDef<RecordRow, any> = {
+    const columnDef: AccessorKeyColumnDef<RecordRow, ColumnValue> = {
       accessorKey: newFieldName,
       header: () => (
         <ColumnHeader
@@ -222,12 +231,14 @@ export default function BasePage() {
             <input
               type={newFieldType === "number" ? "number" : "text"}
               className="h-full w-full border-none bg-transparent outline-none"
-              value={value === 0 && newFieldType === "number" ? "" : value}
+              value={
+                value === 0 && newFieldType === "number" ? "" : (value ?? "")
+              }
               onChange={(e) => {
                 const newValue =
                   newFieldType === "number"
                     ? e.target.value === ""
-                      ? ""
+                      ? null
                       : Number(e.target.value)
                     : e.target.value;
                 setData((prev) => {
@@ -251,7 +262,7 @@ export default function BasePage() {
     setData((prevData) =>
       prevData.map((row) => ({
         ...row,
-        [newFieldName]: newFieldType === "number" ? "" : "",
+        [newFieldName]: newFieldType === "number" ? null : "",
       })),
     );
 
