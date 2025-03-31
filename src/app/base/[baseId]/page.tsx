@@ -300,6 +300,9 @@ export default function BasePage() {
           <button className="rounded border px-3 py-1 hover:bg-gray-100">
             Color
           </button>
+          <button className="rounded border px-3 py-1 hover:bg-gray-100">
+            Share and sync
+          </button>
         </div>
       </div>
 

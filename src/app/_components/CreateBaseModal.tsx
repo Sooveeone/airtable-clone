@@ -68,7 +68,7 @@ export function CreateBaseModal({ isOpen, onClose }: CreateBaseModalProps) {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  placeholder="My Awesome Base"
+                  placeholder="Enter base name"
                   disabled={isLoading}
                 />
               </div>
