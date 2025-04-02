@@ -13,7 +13,7 @@ export const tableRouter = createTRPCRouter({
       const tables = await ctx.db.table.findMany({
         where: { baseId: input.baseId },
         orderBy: {
-          name: "asc",
+          name: "asc", // Sort tables consistently
         },
       });
       return tables;
@@ -33,6 +33,7 @@ export const tableRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // First create the table
       const table = await ctx.db.table.create({
         data: {
           name: input.name,
@@ -40,6 +41,7 @@ export const tableRouter = createTRPCRouter({
         },
       });
 
+      // Then create the columns
       for (const column of input.columns) {
         await ctx.db.column.create({
           data: {
@@ -54,30 +56,28 @@ export const tableRouter = createTRPCRouter({
     }),
 
   getTableData: protectedProcedure
-    .input(z.object({ tableId: z.string() }))
+    .input(
+      z.object({
+        tableId: z.string(),
+        // Removed the limit parameter, will fetch all rows
+      }),
+    )
     .query(async ({ ctx, input }) => {
-      const table = await ctx.db.table.findUnique({
-        where: { id: input.tableId },
-        include: {
-          columns: {
-            orderBy: {
-              order: "asc",
-            },
-          },
-          rows: {
-            orderBy: {
-              order: "asc",
-            },
-          },
-        },
-      });
-
-      if (!table)
-        throw new TRPCError({ code: "NOT_FOUND", message: "Table not found" });
+      const [columns, rows] = await Promise.all([
+        ctx.db.column.findMany({
+          where: { tableId: input.tableId },
+          orderBy: { order: "asc" },
+        }),
+        ctx.db.row.findMany({
+          where: { tableId: input.tableId },
+          orderBy: { order: "asc" },
+          // No limit or offset - fetch all rows
+        }),
+      ]);
 
       return {
-        columns: table.columns,
-        rows: table.rows,
+        columns,
+        rows,
       };
     }),
 
@@ -98,7 +98,10 @@ export const tableRouter = createTRPCRouter({
       if (!row)
         throw new TRPCError({ code: "NOT_FOUND", message: "Row not found" });
 
+      // Convert the JSON data to a proper object
       const currentData = row.data as Prisma.JsonObject;
+
+      // Create a new data object with the updated value
       const updatedData = {
         ...currentData,
         [input.columnName]: input.value,
@@ -112,6 +115,7 @@ export const tableRouter = createTRPCRouter({
       });
     }),
 
+  // For the createRow mutation - now with _clientId support
   createRow: protectedProcedure
     .input(
       z.object({
@@ -121,6 +125,7 @@ export const tableRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // Find the last row by order value
       const lastRow = await ctx.db.row.findFirst({
         where: { tableId: input.tableId },
         orderBy: { order: "desc" },
@@ -137,7 +142,7 @@ export const tableRouter = createTRPCRouter({
         data: {
           tableId: input.tableId,
           data: jsonData,
-          order: nextOrder,
+          order: nextOrder, // this ensures stable order
         },
       });
 
@@ -156,6 +161,7 @@ export const tableRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // First check if column already exists
       const existingColumn = await ctx.db.column.findFirst({
         where: {
           tableId: input.tableId,
@@ -170,6 +176,7 @@ export const tableRouter = createTRPCRouter({
         });
       }
 
+      // Get current highest order value
       const lastColumn = await ctx.db.column.findFirst({
         where: { tableId: input.tableId },
         orderBy: { order: "desc" },
@@ -182,17 +189,24 @@ export const tableRouter = createTRPCRouter({
           name: input.name,
           type: input.type,
           tableId: input.tableId,
-          order: nextOrder,
+          order: nextOrder, // ✅ set order here
         },
       });
 
+      // Initialize this column for all existing rows
       const existingRows = await ctx.db.row.findMany({
-        where: { tableId: input.tableId },
+        where: {
+          tableId: input.tableId,
+        },
       });
 
+      // Update each row to add the new column with a default value
       for (const row of existingRows) {
         const currentData = row.data as Prisma.JsonObject;
+
+        // Set default value based on column type
         const defaultValue = input.type === "number" ? null : "";
+
         const updatedData = {
           ...currentData,
           [input.name]: defaultValue,
@@ -256,6 +270,7 @@ export const tableRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  // For the createRows mutation - batch creation
   createRows: protectedProcedure
     .input(
       z.object({
@@ -265,25 +280,15 @@ export const tableRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const createdRows = [];
-
-      const lastRow = await ctx.db.row.findFirst({
-        where: { tableId: input.tableId },
-        orderBy: { order: "desc" },
-      });
-
-      let currentOrder = (lastRow?.order ?? -1) + 1;
-
       for (const rowData of input.rows) {
         const row = await ctx.db.row.create({
           data: {
             tableId: input.tableId,
             data: rowData as Prisma.InputJsonValue,
-            order: currentOrder++,
           },
         });
         createdRows.push(row);
       }
-
       return createdRows;
     }),
 });

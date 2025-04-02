@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   useReactTable,
@@ -12,6 +12,7 @@ import { faker } from "@faker-js/faker";
 import { UserButton } from "@clerk/nextjs";
 import { api } from "@/trpc/react";
 import type { RouterOutputs } from "@/trpc/shared";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { ChevronDown, Loader2 } from "lucide-react";
 
@@ -102,6 +103,7 @@ export default function BasePage() {
   const [tableId, setTableId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const parentRef = useRef<HTMLDivElement>(null);
 
   // Fetch base info
   const { data: base, isLoading: isBaseLoading } = api.base.getById.useQuery({
@@ -243,7 +245,8 @@ export default function BasePage() {
     },
   });
 
-  // Function to create a cell renderer for a column
+  // Updated createCellRenderer function to highlight cell on click
+
   const createCellRenderer = (key: string, fieldType: "text" | "number") => {
     return ({
       row,
@@ -257,6 +260,91 @@ export default function BasePage() {
         selectedCell?.rowIndex === row.index &&
         selectedCell?.columnId === column.id;
 
+      // Local state for cell editing
+      const [localValue, setLocalValue] = useState<string | number | null>(
+        value === 0 && fieldType === "number" ? 0 : (value ?? ""),
+      );
+      const [isEditing, setIsEditing] = useState(false);
+      const inputRef = useRef<HTMLInputElement>(null);
+
+      // Update local value when the row value changes
+      useEffect(() => {
+        setLocalValue(
+          value === 0 && fieldType === "number" ? 0 : (value ?? ""),
+        );
+      }, [value]);
+
+      // Focus on the input when selected
+      useEffect(() => {
+        if (isSelected && inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, [isSelected]);
+
+      // Handle saving the cell data
+      const saveCell = () => {
+        if (!isEditing) return;
+
+        // Convert value based on field type
+        const newValue =
+          fieldType === "number"
+            ? localValue === ""
+              ? null
+              : Number(localValue)
+            : localValue;
+
+        // Only update if the value has changed
+        if (newValue !== value) {
+          // Update local state optimistically, but use ID for lookup
+          setData((prev) =>
+            prev.map((item) => {
+              if (item.id === row.original.id) {
+                return {
+                  ...item,
+                  [key]: newValue,
+                };
+              }
+              return item;
+            }),
+          );
+
+          // Save to database using the row ID
+          if (tableId && row.original.id) {
+            setIsSaving(true);
+            updateCellMutation.mutate({
+              tableId,
+              rowId: row.original.id,
+              columnName: key,
+              value: newValue,
+            });
+          }
+        }
+
+        setIsEditing(false);
+      };
+
+      // Handle key press events
+      const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          saveCell();
+          setSelectedCell(null);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          // Reset to original value
+          setLocalValue(
+            value === 0 && fieldType === "number" ? 0 : (value ?? ""),
+          );
+          setIsEditing(false);
+          setSelectedCell(null);
+        } else {
+          // Start editing on any other key press
+          if (!isEditing) {
+            setIsEditing(true);
+          }
+        }
+      };
+
       return (
         <div
           className="relative h-full w-full"
@@ -269,49 +357,44 @@ export default function BasePage() {
             <div className="pointer-events-none absolute inset-0 z-10 border-2 border-blue-500" />
           )}
           <input
+            ref={inputRef}
             type={fieldType === "number" ? "number" : "text"}
             className="h-full w-full border-none bg-transparent outline-none"
-            value={value === 0 && fieldType === "number" ? "" : (value ?? "")}
-            // Update the cell onChange handler
+            value={
+              isEditing
+                ? localValue === 0
+                  ? "0"
+                  : (localValue ?? "")
+                : value === 0
+                  ? "0"
+                  : (value ?? "")
+            }
             onChange={(e) => {
-              const newValue =
+              const val =
                 fieldType === "number"
                   ? e.target.value === ""
-                    ? null
-                    : Number(e.target.value)
+                    ? ""
+                    : e.target.value
                   : e.target.value;
-
-              // Update local state optimistically, but use ID for lookup
-              setData((prev) =>
-                prev.map((item) => {
-                  if (item.id === row.original.id) {
-                    return {
-                      ...item,
-                      [key]: newValue,
-                    };
-                  }
-                  return item;
-                }),
-              );
-
-              // Save to database using the row ID
-              if (tableId && row.original.id) {
-                setIsSaving(true);
-                updateCellMutation.mutate({
-                  tableId,
-                  rowId: row.original.id,
-                  columnName: key,
-                  value: newValue,
-                });
+              setLocalValue(val);
+              setIsEditing(true);
+            }}
+            onBlur={() => {
+              saveCell();
+            }}
+            onKeyDown={handleKeyDown}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isEditing) {
+                // Only set editing mode when user starts typing
+                // not on initial click
               }
             }}
-            onClick={(e) => e.stopPropagation()}
           />
         </div>
       );
     };
   };
-
   const [columns, setColumns] = useState<
     AccessorKeyColumnDef<RecordRow, ColumnValue>[]
   >([]);
@@ -334,7 +417,15 @@ export default function BasePage() {
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getRowId: (row) => row.id || "", // Ensure rows are identified by their database IDs
+    getRowId: (row) => row.id ?? faker.string.uuid(),
+    columnResizeMode: "onChange", // Optional for resizing later
+  });
+
+  const rowVirtualizer = useVirtualizer({
+    count: table.getRowModel().rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 35, // approx height of each row in px
+    overscan: 10,
   });
 
   const handleAddColumn = () => {
@@ -408,19 +499,23 @@ export default function BasePage() {
   };
 
   // Add a new record to the database
-  // Add a new record to the database
   const handleAddRecord = () => {
     if (!tableId) return;
 
     setIsSaving(true);
 
-    // Generate a record with default values
+    // Generate a record with random values based on column type
     const defaultData: Record<string, string | number | null> = {};
 
     columns.forEach((col) => {
       const key = col.accessorKey;
       const meta = col.meta as ColumnMeta | undefined;
-      defaultData[key] = meta?.type === "number" ? null : "";
+
+      // Generate random data based on column type
+      defaultData[key] =
+        meta?.type === "number"
+          ? faker.number.int({ min: 0, max: 100 })
+          : faker.word.words({ count: faker.number.int({ min: 1, max: 3 }) }); // Generate 1-3 random words for text fields
     });
 
     createRowMutation.mutate(
@@ -429,10 +524,21 @@ export default function BasePage() {
         defaultData,
       },
       {
-        onSuccess: async () => {
-          await refetchTableData();
+        onSuccess: (newRow) => {
+          setData((prev) => {
+            const exists = prev.some((row) => row.id === newRow.id);
+            if (exists) return prev;
+            return [
+              {
+                id: newRow.id,
+                ...(newRow.data as Record<string, string | number | null>),
+              },
+              ...prev,
+            ];
+          });
           setIsSaving(false);
         },
+
         onError: (error) => {
           console.error("Failed to create row:", error);
           setIsSaving(false);
@@ -554,22 +660,39 @@ export default function BasePage() {
             <span className="text-gray-600">Loading table data...</span>
           </div>
         ) : (
-          <table className="min-w-full table-auto border-collapse text-sm">
-            <thead className="sticky top-0 z-10 bg-gray-50">
+          <div
+            ref={parentRef}
+            className="h-full w-full overflow-auto"
+            onClick={() => setSelectedCell(null)}
+          >
+            {/* Header row - fixed at the top */}
+            <div className="sticky top-0 z-10 flex bg-gray-50 font-semibold text-gray-600">
               {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
+                <div key={headerGroup.id} className="flex w-full">
                   {headerGroup.headers.map((header) => (
-                    <th
+                    <div
                       key={header.id}
-                      className="border-r border-gray-200 px-4 py-2 font-semibold text-gray-600"
+                      style={{
+                        width: `${header.getSize()}px`,
+                        minWidth: `${header.getSize()}px`,
+                      }}
+                      className="border-r border-b border-gray-200 px-4 py-2 text-left"
                     >
                       {flexRender(
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
-                    </th>
+                    </div>
                   ))}
-                  <th className="relative border-r border-gray-200 px-4 py-2">
+
+                  {/* Extra header column for "+ Add field" */}
+                  <div
+                    className="border-b border-gray-200 px-4 py-2 text-left"
+                    style={{
+                      width: "150px",
+                      minWidth: "150px",
+                    }}
+                  >
                     <button
                       onClick={() => {
                         setIsFieldModalOpen(!isFieldModalOpen);
@@ -580,7 +703,7 @@ export default function BasePage() {
                       + Add field
                     </button>
                     {isFieldModalOpen && (
-                      <div className="absolute right-0 z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
+                      <div className="absolute z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
                         <input
                           type="text"
                           placeholder="Field name"
@@ -611,28 +734,64 @@ export default function BasePage() {
                         </button>
                       </div>
                     )}
-                  </th>
-                </tr>
+                  </div>
+                </div>
               ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="border-t hover:bg-gray-50">
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className="relative border-r border-gray-200 px-4 py-2"
-                    >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            </div>
+
+            {/* Table body with virtualization */}
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: "100%",
+                position: "relative",
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = table.getRowModel().rows[virtualRow.index];
+                if (!row) return null;
+
+                return (
+                  <div
+                    key={row.id ?? virtualRow.index}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      transform: `translateY(${virtualRow.start}px)`,
+                      width: "100%",
+                      height: "35px",
+                    }}
+                    className="flex border-b border-gray-200"
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <div
+                        key={cell.id}
+                        style={{
+                          width: `${cell.column.getSize()}px`,
+                          minWidth: `${cell.column.getSize()}px`,
+                        }}
+                        className="border-r border-gray-100 px-4 py-2"
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Empty cell to match the "+ Add field" column */}
+                    <div
+                      style={{
+                        width: "150px",
+                        minWidth: "150px",
+                      }}
+                      className="px-4 py-2"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
 
