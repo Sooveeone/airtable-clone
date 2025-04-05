@@ -1,5 +1,7 @@
 "use client";
 
+import type React from "react";
+
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import {
@@ -10,10 +12,11 @@ import {
   type CellContext,
 } from "@tanstack/react-table";
 import { faker } from "@faker-js/faker";
-import { UserButton } from "@clerk/nextjs";
 import { api } from "@/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { UserButton } from "@clerk/nextjs";
 
 // Define proper column meta type
 interface ColumnMeta {
@@ -62,9 +65,7 @@ function ColumnHeader({
         <span>{name.charAt(0).toUpperCase() + name.slice(1)}</span>
         <ChevronDown
           size={14}
-          className={`text-gray-500 transition-transform duration-150 ${
-            open ? "rotate-180" : ""
-          }`}
+          className={`text-gray-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && (
@@ -540,55 +541,148 @@ export default function BasePage() {
   return (
     <div className="flex h-screen flex-col">
       {/* Top Navigation */}
-      <div className="flex items-center justify-between gap-6 border-b bg-gray-700 px-4 py-2 text-sm text-white shadow-sm">
+      <div
+        style={{ backgroundColor: "#535965" }}
+        className="flex items-center justify-between px-4 py-3 text-sm shadow-sm"
+      >
         <div className="flex items-center gap-6">
-          <h1 className="text-lg font-semibold">
-            {isBaseLoading ? "Loading..." : (base?.name ?? "Untitled Base")}
-          </h1>
-          <div className="flex gap-4">
-            <button className="hover:underline">Data</button>
-            <button className="hover:underline">Automations</button>
-            <button className="hover:underline">Interfaces</button>
-            <button className="hover:underline">Forms</button>
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded">
+              <Image
+                src="/airtable-svgrepo-com.svg"
+                alt="Airtable Logo"
+                width={20}
+                height={20}
+                className="object-contain"
+              />
+            </div>
+            <h1 className="flex items-center gap-1 text-xl font-medium text-gray-100 hover:text-white">
+              {isBaseLoading ? "Loading..." : (base?.name ?? "Untitled Base 2")}
+              <ChevronDown size={16} className="text-gray-500" />
+            </h1>
+          </div>
+          <div className="flex gap-6">
+            <button className="font-light text-gray-100 hover:text-white">
+              Data
+            </button>
+            <button className="font-light text-gray-100 hover:text-white">
+              Automations
+            </button>
+            <button className="font-light text-gray-100 hover:text-white">
+              Interfaces
+            </button>
+            <div className="mx-2 h-5 w-px bg-gray-500"></div>
+            <button className="font-light text-gray-100 hover:text-white">
+              Forms
+            </button>
           </div>
         </div>
-        <UserButton />
+        <div className="flex items-center gap-3">
+          <button className="rounded-full p-1 hover:bg-gray-200">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 12h18"></path>
+              <path d="M3 6h18"></path>
+              <path d="M3 18h18"></path>
+            </svg>
+          </button>
+          <button className="rounded-full p-1 hover:bg-gray-200">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M1 4v6h6"></path>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+          </button>
+          <button className="flex items-center gap-1 rounded-full p-1 hover:bg-gray-200">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+              <path d="M12 17h.01"></path>
+            </svg>
+            <span className="font-medium text-gray-100 hover:text-white">
+              Help
+            </span>
+          </button>
+          <button className="flex items-center gap-1 rounded-full bg-white px-4 py-1.5 font-medium shadow-sm hover:bg-gray-50">
+            <span>Share</span>
+          </button>
+          <button className="rounded-full p-1 hover:bg-gray-200">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+            </svg>
+          </button>
+          <div className="flex h-8 w-8 items-center justify-center">
+            <UserButton></UserButton>
+          </div>
+        </div>
       </div>
 
       {/* Table Header */}
-      <div className="flex items-center gap-2 border-b bg-white px-4 py-2 text-sm shadow-sm">
-        <select className="rounded border px-2 py-1 text-sm">
-          <option>Table 1</option>
-        </select>
-        <button className="text-xl leading-none">+</button>
+      <div className="flex items-center border-b bg-gray-100 px-4 py-2 text-sm shadow-sm">
+        <div className="flex items-center">
+          <button className="flex items-center gap-1 rounded-md bg-white px-3 py-1.5 font-medium shadow-sm">
+            <span>Table 1</span>
+            <ChevronDown size={16} className="text-gray-500" />
+          </button>
+          <button className="ml-2 flex h-8 w-8 items-center justify-center rounded-md bg-white text-xl font-medium shadow-sm">
+            +
+          </button>
+        </div>
         {isSaving && (
           <div className="ml-2 flex items-center text-gray-600">
             <Loader2 className="mr-1 h-4 w-4 animate-spin" />
             Saving...
           </div>
         )}
-      </div>
-
-      {/* Column Toolbar */}
-      <div className="flex items-center justify-between border-b bg-white px-4 py-2 text-sm shadow-sm">
-        <div className="flex gap-2">
-          <button className="rounded border px-3 py-1 hover:bg-gray-100">
-            Views
-          </button>
-          <button className="rounded border px-3 py-1 hover:bg-gray-100">
-            Filter
-          </button>
-          <button className="rounded border px-3 py-1 hover:bg-gray-100">
-            Sort
-          </button>
-          <button className="rounded border px-3 py-1 hover:bg-gray-100">
-            Color
-          </button>
-          <button className="rounded border px-3 py-1 hover:bg-gray-100">
-            Share and sync
-          </button>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="font-medium text-gray-500">Extensions</span>
+          <div className="flex items-center gap-1">
+            <span className="font-medium text-gray-500">Tools</span>
+            <ChevronDown size={16} className="text-gray-500" />
+          </div>
         </div>
       </div>
+
+      {/* No column toolbar in the screenshot */}
 
       {/* Table Body */}
       <div
@@ -607,7 +701,7 @@ export default function BasePage() {
             onClick={() => setSelectedCell(null)}
           >
             {/* Table Header Row */}
-            <div className="sticky top-0 z-10 flex bg-gray-50 font-semibold text-gray-600">
+            <div className="sticky top-0 z-10 flex bg-gray-200 font-semibold text-gray-600">
               {table.getHeaderGroups().map((headerGroup) => (
                 <div key={headerGroup.id} className="flex w-full">
                   {headerGroup.headers.map((header) => (
