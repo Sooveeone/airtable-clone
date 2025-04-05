@@ -572,41 +572,41 @@ export default function BasePage() {
                 className="object-contain"
               />
             </div>
-            <h1 className="flex items-center gap-1 text-xl font-medium text-gray-100 hover:text-white">
+            <h1 className="flex items-center gap-1 text-lg font-bold text-gray-100 hover:text-white">
               {isBaseLoading ? "Loading..." : (base?.name ?? "Untitled Base 2")}
               <ChevronDown size={16} className="text-gray-100" />
             </h1>
           </div>
           <div className="flex gap-6">
-            <button className="font-light text-gray-100 hover:text-white">
+            <button className="cursor-pointer font-light text-gray-100 hover:text-white">
               Data
             </button>
-            <button className="font-light text-gray-100 hover:text-white">
+            <button className="cursor-pointer font-light text-gray-100 hover:text-white">
               Automations
             </button>
-            <button className="font-light text-gray-100 hover:text-white">
+            <button className="cursor-pointer font-light text-gray-100 hover:text-white">
               Interfaces
             </button>
             <div className="mx-2 h-5 w-px bg-gray-500"></div>
-            <button className="font-light text-gray-100 hover:text-white">
+            <button className="cursor-pointer font-light text-gray-100 hover:text-white">
               Forms
             </button>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <button className="rounded-full p-1 hover:bg-gray-200">
+          <button className="cursor-pointer rounded-full p-1">
             <History className="w-5 stroke-1 text-gray-100" />
           </button>
-          <button className="flex items-center gap-1 rounded-full p-1 hover:bg-gray-200">
+          <button className="flex cursor-pointer items-center gap-1 rounded-full p-1">
             <CircleHelp className="mr-1 h-5 stroke-1 text-gray-100" />
-            <span className="font-light text-gray-100 hover:text-white">
+            <span className="cursor-pointer font-light text-gray-100 hover:text-white">
               Help
             </span>
           </button>
-          <button className="flex items-center gap-1 rounded-full bg-white px-4 py-1.5 font-light shadow-sm hover:bg-gray-50">
+          <button className="flex cursor-pointer items-center gap-1 rounded-full bg-white px-4 py-1.5 font-light shadow-sm hover:bg-gray-50">
             <span>Share</span>
           </button>
-          <button className="rounded-full p-1 hover:bg-gray-200">
+          <button className="cursor-pointer rounded-full p-1 hover:bg-gray-200">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="20"
@@ -724,7 +724,7 @@ export default function BasePage() {
             onClick={() => setSelectedCell(null)}
           >
             {/* Table Header Row */}
-            <div className="sticky top-0 z-10 flex bg-gray-200 font-semibold text-gray-600">
+            <div className="font-small sticky top-0 z-10 flex bg-[#f4f4f4] text-gray-800">
               {table.getHeaderGroups().map((headerGroup) => (
                 <div key={headerGroup.id} className="flex w-full">
                   {headerGroup.headers.map((header) => (
@@ -754,7 +754,7 @@ export default function BasePage() {
                           setFieldError("");
                         }
                       }}
-                      className="rounded border px-2 py-1 text-sm hover:bg-gray-100"
+                      className="cursor-pointer px-2 py-1 text-sm hover:underline"
                       disabled={isAddingColumn}
                     >
                       {isAddingColumn ? "Adding..." : "+ Add field"}
@@ -851,7 +851,7 @@ export default function BasePage() {
       {/* Footer with Add Record buttons */}
       <div className="flex items-center gap-6 border-t bg-white px-4 py-2 text-sm">
         <button
-          className="text-blue-600 hover:underline"
+          className="cursor-pointer text-blue-600 hover:underline"
           onClick={createRowHandler}
           disabled={isSaving}
         >
