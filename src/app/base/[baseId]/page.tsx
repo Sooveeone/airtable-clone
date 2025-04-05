@@ -244,6 +244,8 @@ export default function BasePage() {
   const [tableId, setTableId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  // New state for tracking column addition progress
+  const [isAddingColumn, setIsAddingColumn] = useState(false);
   const parentRef = useRef<HTMLDivElement>(null);
   const initialTableCreationAttempted = useRef(false);
 
@@ -266,7 +268,7 @@ export default function BasePage() {
     },
   });
 
-  // Mutation for updating cell values with explicit types
+  // Mutation for updating cell values (types inferred from router)
   const updateCellMutation = api.table.updateCell.useMutation({
     onSuccess: () => {
       setIsSaving(false);
@@ -335,7 +337,6 @@ export default function BasePage() {
   const handleDeleteColumn = useCallback(
     (name: string) => {
       if (!tableId) return;
-      // Remove the property without an unused variable
       setData((prevData) =>
         prevData.map((row) => {
           const newRow = { ...row };
@@ -402,6 +403,12 @@ export default function BasePage() {
       if (tableId) {
         void refetchTableData();
       }
+      // When finished adding the column, stop the loading state.
+      setIsAddingColumn(false);
+    },
+    onError: (error) => {
+      console.error("Failed to add column:", error);
+      setIsAddingColumn(false);
     },
   });
 
@@ -425,24 +432,13 @@ export default function BasePage() {
       setFieldError("A column with that name already exists.");
       return;
     }
-    // Call the createColumn mutation and wait for it to finish,
-    // then refetch the full table data.
-    createColumnMutation.mutate(
-      {
-        tableId,
-        name: newFieldName,
-        type: newFieldType,
-      },
-      {
-        onSuccess: () => {
-          // After the column is successfully created (and rows updated),
-          // refetch the full table data to load the new column.
-          void refetchTableData();
-        },
-      },
-    );
-
-    // Clear the modal values (do not update local data optimistically)
+    setIsAddingColumn(true);
+    createColumnMutation.mutate({
+      tableId,
+      name: newFieldName,
+      type: newFieldType,
+    });
+    // Optionally, you can also update local data optimistically here.
     setNewFieldName("");
     setNewFieldType("text");
     setFieldError("");
@@ -640,12 +636,15 @@ export default function BasePage() {
                   >
                     <button
                       onClick={() => {
-                        setIsFieldModalOpen(!isFieldModalOpen);
-                        setFieldError("");
+                        if (!isAddingColumn) {
+                          setIsFieldModalOpen(!isFieldModalOpen);
+                          setFieldError("");
+                        }
                       }}
                       className="rounded border px-2 py-1 text-sm hover:bg-gray-100"
+                      disabled={isAddingColumn}
                     >
-                      + Add field
+                      {isAddingColumn ? "Adding..." : "+ Add field"}
                     </button>
                     {isFieldModalOpen && (
                       <div className="absolute z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
@@ -674,8 +673,9 @@ export default function BasePage() {
                         <button
                           onClick={handleAddColumn}
                           className="w-full rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-700"
+                          disabled={isAddingColumn}
                         >
-                          Add Field
+                          {isAddingColumn ? "Adding..." : "Add Field"}
                         </button>
                       </div>
                     )}
