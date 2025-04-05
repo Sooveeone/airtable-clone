@@ -1,10 +1,9 @@
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { TRPCError } from "@trpc/server";
-import { Prisma } from "@prisma/client";
 
-// Helper type for JSON data
-type JsonData = Prisma.JsonValue;
+// Removed unused JsonData type definition
 
 export const tableRouter = createTRPCRouter({
   getTablesForBase: protectedProcedure
@@ -257,6 +256,7 @@ export const tableRouter = createTRPCRouter({
 
       for (const row of rows) {
         const data = row.data as Prisma.JsonObject;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { [input.columnName]: removed, ...newData } = data;
 
         await ctx.db.row.update({
