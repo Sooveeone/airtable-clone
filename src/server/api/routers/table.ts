@@ -124,31 +124,25 @@ export const tableRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Find the last row by order value
-      const lastRow = await ctx.db.row.findFirst({
-        where: { tableId: input.tableId },
-        orderBy: { order: "desc" },
+      const newRow = await ctx.db.$transaction(async (prisma) => {
+        const lastRow = await prisma.row.findFirst({
+          where: { tableId: input.tableId },
+          orderBy: { order: "desc" },
+        });
+        const nextOrder = (lastRow?.order ?? -1) + 1;
+        const jsonData = {
+          ...input.defaultData,
+          ...(input._clientId ? { _clientId: input._clientId } : {}),
+        } as Prisma.InputJsonValue;
+        return await prisma.row.create({
+          data: {
+            tableId: input.tableId,
+            data: jsonData,
+            order: nextOrder,
+          },
+        });
       });
-
-      const nextOrder = (lastRow?.order ?? -1) + 1;
-
-      const jsonData = {
-        ...input.defaultData,
-        ...(input._clientId ? { _clientId: input._clientId } : {}),
-      } as Prisma.InputJsonValue;
-
-      const row = await ctx.db.row.create({
-        data: {
-          tableId: input.tableId,
-          data: jsonData,
-          order: nextOrder, // this ensures stable order
-        },
-      });
-
-      return {
-        ...row,
-        _clientId: input._clientId,
-      };
+      return newRow;
     }),
 
   createColumn: protectedProcedure
@@ -200,12 +194,10 @@ export const tableRouter = createTRPCRouter({
       });
 
       // Update each row to add the new column with a default value
+
       for (const row of existingRows) {
         const currentData = row.data as Prisma.JsonObject;
-
-        // Set default value based on column type
         const defaultValue = input.type === "number" ? null : "";
-
         const updatedData = {
           ...currentData,
           [input.name]: defaultValue,
@@ -215,6 +207,7 @@ export const tableRouter = createTRPCRouter({
           where: { id: row.id },
           data: {
             data: updatedData,
+            order: row.order, // explicitly preserve the row's order
           },
         });
       }

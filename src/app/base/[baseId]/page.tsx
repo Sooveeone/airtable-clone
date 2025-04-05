@@ -448,8 +448,9 @@ export default function BasePage() {
   // Mutation to create multiple rows at once
   const createRowsMutation = api.table.createRows.useMutation();
 
-  const createRowHandler = () => {
+  const createRowHandler = async () => {
     if (!tableId) return;
+    if (isSaving) return; // Prevent multiple concurrent requests
     setIsSaving(true);
     const defaultData: Record<string, string | number | null> = {};
     columns.forEach((col) => {
@@ -460,32 +461,27 @@ export default function BasePage() {
           ? faker.number.int({ min: 0, max: 100 })
           : faker.word.words({ count: faker.number.int({ min: 1, max: 3 }) });
     });
-    createRowMutation.mutate(
-      {
+    try {
+      const newRow = await createRowMutation.mutateAsync({
         tableId,
         defaultData,
-      },
-      {
-        onSuccess: (newRow) => {
-          setData((prev) => {
-            const exists = prev.some((row) => row.id === newRow.id);
-            if (exists) return prev;
-            return [
-              {
-                id: newRow.id,
-                ...(newRow.data as Record<string, string | number | null>),
-              },
-              ...prev,
-            ];
-          });
-          setIsSaving(false);
-        },
-        onError: (error) => {
-          console.error("Failed to create row:", error);
-          setIsSaving(false);
-        },
-      },
-    );
+      });
+      setData((prev) => {
+        const exists = prev.some((row) => row.id === newRow.id);
+        if (exists) return prev;
+        return [
+          {
+            id: newRow.id,
+            ...(newRow.data as Record<string, string | number | null>),
+          },
+          ...prev,
+        ];
+      });
+    } catch (error) {
+      console.error("Failed to create row:", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAddFakeRecords = (count: number) => {
@@ -740,6 +736,7 @@ export default function BasePage() {
         <button
           className="text-blue-600 hover:underline"
           onClick={createRowHandler}
+          disabled={isSaving}
         >
           + Add record
         </button>
