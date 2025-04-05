@@ -425,18 +425,24 @@ export default function BasePage() {
       setFieldError("A column with that name already exists.");
       return;
     }
-    createColumnMutation.mutate({
-      tableId,
-      name: newFieldName,
-      type: newFieldType,
-    });
-    // Update existing rows with a default value for the new column
-    setData((prevData) =>
-      prevData.map((row) => ({
-        ...row,
-        [newFieldName]: newFieldType === "number" ? null : "",
-      })),
+    // Call the createColumn mutation and wait for it to finish,
+    // then refetch the full table data.
+    createColumnMutation.mutate(
+      {
+        tableId,
+        name: newFieldName,
+        type: newFieldType,
+      },
+      {
+        onSuccess: () => {
+          // After the column is successfully created (and rows updated),
+          // refetch the full table data to load the new column.
+          void refetchTableData();
+        },
+      },
     );
+
+    // Clear the modal values (do not update local data optimistically)
     setNewFieldName("");
     setNewFieldType("text");
     setFieldError("");
