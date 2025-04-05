@@ -14,7 +14,23 @@ import {
 import { faker } from "@faker-js/faker";
 import { api } from "@/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDown, Loader2 } from "lucide-react";
+import {
+  ArrowUpDown,
+  ChevronDown,
+  Eye,
+  Filter,
+  FolderKanban,
+  LayoutGrid,
+  Menu,
+  Palette,
+  Share2,
+  SquareStack,
+  AlignJustify,
+  History,
+  Loader2,
+  CircleHelp,
+  Plus,
+} from "lucide-react";
 import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
 
@@ -65,7 +81,7 @@ function ColumnHeader({
         <span>{name.charAt(0).toUpperCase() + name.slice(1)}</span>
         <ChevronDown
           size={14}
-          className={`text-gray-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`text-gray-100 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && (
@@ -558,7 +574,7 @@ export default function BasePage() {
             </div>
             <h1 className="flex items-center gap-1 text-xl font-medium text-gray-100 hover:text-white">
               {isBaseLoading ? "Loading..." : (base?.name ?? "Untitled Base 2")}
-              <ChevronDown size={16} className="text-gray-500" />
+              <ChevronDown size={16} className="text-gray-100" />
             </h1>
           </div>
           <div className="flex gap-6">
@@ -577,61 +593,17 @@ export default function BasePage() {
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <button className="rounded-full p-1 hover:bg-gray-200">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 12h18"></path>
-              <path d="M3 6h18"></path>
-              <path d="M3 18h18"></path>
-            </svg>
-          </button>
-          <button className="rounded-full p-1 hover:bg-gray-200">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M1 4v6h6"></path>
-              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-            </svg>
+            <History className="w-5 stroke-1 text-gray-100" />
           </button>
           <button className="flex items-center gap-1 rounded-full p-1 hover:bg-gray-200">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-              <path d="M12 17h.01"></path>
-            </svg>
-            <span className="font-medium text-gray-100 hover:text-white">
+            <CircleHelp className="mr-1 h-5 stroke-1 text-gray-100" />
+            <span className="font-light text-gray-100 hover:text-white">
               Help
             </span>
           </button>
-          <button className="flex items-center gap-1 rounded-full bg-white px-4 py-1.5 font-medium shadow-sm hover:bg-gray-50">
+          <button className="flex items-center gap-1 rounded-full bg-white px-4 py-1.5 font-light shadow-sm hover:bg-gray-50">
             <span>Share</span>
           </button>
           <button className="rounded-full p-1 hover:bg-gray-200">
@@ -645,6 +617,7 @@ export default function BasePage() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
+              className="text-gray-100"
             >
               <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
               <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
@@ -657,33 +630,83 @@ export default function BasePage() {
       </div>
 
       {/* Table Header */}
-      <div className="flex items-center border-b bg-gray-100 px-4 py-2 text-sm shadow-sm">
-        <div className="flex items-center">
-          <button className="flex items-center gap-1 rounded-md bg-white px-3 py-1.5 font-medium shadow-sm">
-            <span>Table 1</span>
-            <ChevronDown size={16} className="text-gray-500" />
-          </button>
-          <button className="ml-2 flex h-8 w-8 items-center justify-center rounded-md bg-white text-xl font-medium shadow-sm">
-            +
-          </button>
-        </div>
-        {isSaving && (
-          <div className="ml-2 flex items-center text-gray-600">
-            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-            Saving...
+      <div className="flex h-8 items-center justify-between bg-[#4c505b] px-4 text-sm">
+        <div className="flex h-full items-center gap-2">
+          {/* Table 1 with dropdown in white container */}
+          <div className="h-full">
+            <div className="flex h-full items-center rounded-t-md bg-white px-4">
+              <span className="font-small mr-2 text-base text-sm">Table 1</span>
+              <ChevronDown size={16} className="text-gray-500" />
+            </div>
           </div>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          <span className="font-medium text-gray-500">Extensions</span>
+
+          {/* Chevron down */}
+          <div className="flex h-full items-center px-2">
+            <ChevronDown size={16} className="text-white" />
+          </div>
+
+          {/* Plus/Add or import */}
+          <div className="flex h-full items-center">
+            <Plus size={16} className="mr-1 text-white" />
+            <span className="text-sm font-light text-gray-200">
+              Add or import
+            </span>
+          </div>
+        </div>
+
+        {/* Right side with Extensions and Tools */}
+        <div className="flex items-center gap-6">
+          <span className="text-sm font-light text-gray-100">Extensions</span>
           <div className="flex items-center gap-1">
-            <span className="font-medium text-gray-500">Tools</span>
-            <ChevronDown size={16} className="text-gray-500" />
+            <span className="text-sm font-light text-gray-100">Tools</span>
+            <ChevronDown size={16} className="text-white" />
           </div>
         </div>
       </div>
 
-      {/* No column toolbar in the screenshot */}
-
+      {/*Column Toolbar*/}
+      <div className="flex items-center border-b bg-white px-4 py-2 text-sm shadow-sm">
+        <div className="flex items-center gap-1">
+          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+            <Menu className="h-4 w-4" />
+            <span>Views</span>
+          </button>
+          <div className="mx-1 h-4 w-px bg-gray-300" />
+          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+            <LayoutGrid className="h-4 w-4" />
+            <span>Grid view</span>
+            <SquareStack className="ml-1 h-3.5 w-3.5" />
+            <ChevronDown className="h-3 w-3" />
+          </button>
+          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+            <Eye className="h-4 w-4" />
+            <span>Hide fields</span>
+          </button>
+          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+            <Filter className="h-4 w-4" />
+            <span>Filter</span>
+          </button>
+          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+            <FolderKanban className="h-4 w-4" />
+            <span>Group</span>
+          </button>
+          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+            <ArrowUpDown className="h-4 w-4" />
+            <span>Sort</span>
+          </button>
+          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+            <Palette className="h-4 w-4" />
+            <span>Color</span>
+          </button>
+          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+            <AlignJustify className="h-4 w-4" />
+          </button>
+          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+            <Share2 className="h-4 w-4" />
+            <span>Share and sync</span>
+          </button>
+        </div>
+      </div>
       {/* Table Body */}
       <div
         className="flex-1 overflow-auto bg-white"
@@ -837,6 +860,7 @@ export default function BasePage() {
         <button
           onClick={() => handleAddFakeRecords(10000)}
           className="text-blue-600 hover:underline"
+          disabled
         >
           Add 10000 rows
         </button>
