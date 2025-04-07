@@ -71,15 +71,26 @@ export const tableRouter = createTRPCRouter({
 
       const orFilter =
         searchQuery && searchQuery.trim().length > 0
-          ? columns.map((col) => ({
-              data: {
-                path: [col.name],
-                string_contains: searchQuery,
-                mode: "insensitive",
-                equals: undefined,
-                not: undefined,
-              } as Prisma.JsonFilter,
-            }))
+          ? columns.flatMap((col) => {
+              const filters: Prisma.JsonFilter[] = [
+                {
+                  path: [col.name],
+                  string_contains: searchQuery,
+                  mode: "insensitive",
+                },
+              ];
+
+              // Add numeric comparison if searchQuery is a valid number
+              const maybeNumber = Number(searchQuery);
+              if (!isNaN(maybeNumber)) {
+                filters.push({
+                  path: [col.name],
+                  equals: maybeNumber,
+                });
+              }
+
+              return filters.map((f) => ({ data: f }));
+            })
           : undefined;
 
       const rows = await ctx.db.row.findMany({

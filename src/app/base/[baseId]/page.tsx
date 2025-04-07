@@ -216,8 +216,9 @@ function CellRenderer({
 
   const matchesQuery =
     searchQuery &&
-    typeof value === "string" &&
-    value.toLowerCase().includes(searchQuery.toLowerCase());
+    ((typeof value === "string" &&
+      value.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (typeof value === "number" && value.toString().includes(searchQuery)));
 
   return (
     <div
