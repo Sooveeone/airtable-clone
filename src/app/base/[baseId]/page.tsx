@@ -436,7 +436,7 @@ export default function BasePage() {
     if (tableId) {
       void refetchTableData();
     }
-  }, [searchQuery, tableId]);
+  }, [searchQuery, tableId, refetchTableData]);
 
   // -----------------------------------------------------------------------
   // Column & Row Mutations
@@ -541,6 +541,7 @@ export default function BasePage() {
       selectedCell,
       handleDeleteColumn,
       handleDeleteRow,
+      searchQuery,
     ]);
 
   // -----------------------------------------------------------------------
@@ -646,8 +647,6 @@ export default function BasePage() {
     setIsSaving(true);
     const batchSize = 100; // Number of rows per batch
     const batches = Math.ceil(count / batchSize);
-
-    const allFakeRecords: RecordRow[] = [];
 
     for (let i = 0; i < batches; i++) {
       const batchCount = Math.min(batchSize, count - i * batchSize);
