@@ -87,7 +87,7 @@ function ColumnHeader({
     <div className="relative h-full w-full">
       <button
         onClick={() => setOpen(!open)}
-        className="flex h-full w-full items-center space-x-1 px-2 hover:bg-gray-100"
+        className="flex h-full w-full items-center space-x-1 px-1 hover:bg-gray-100"
         title={name}
       >
         <TypeIcon size={14} className="flex-shrink-0 text-gray-500" />
@@ -349,17 +349,6 @@ export default function BasePage() {
     },
   });
 
-  const handleAddTable = () => {
-    if (!baseId) return;
-    const newTableName =
-      tables && tables.length > 0 ? `Table ${tables.length + 1}` : "Table 1";
-    createTableMutation.mutate({
-      baseId: baseId as string,
-      name: newTableName,
-      columns: defaultColumnsKeys.map((name) => ({ name, type: "text" })),
-    });
-  };
-
   const updateCellMutation = api.table.updateCell.useMutation({
     onSuccess: () => {
       setIsSaving(false);
@@ -447,10 +436,14 @@ export default function BasePage() {
       console.error("Failed to delete row:", error);
     },
   });
-  function handleDeleteRow(rowId: string) {
-    if (!tableId || !rowId) return;
-    deleteRowMutation.mutate({ tableId, rowId });
-  }
+
+  const handleDeleteRow = useCallback(
+    (rowId: string) => {
+      if (!tableId || !rowId) return;
+      deleteRowMutation.mutate({ tableId, rowId });
+    },
+    [tableId, deleteRowMutation],
+  );
 
   // -----------------------------------------------------------------------
   // Build Columns (Prepending the row number column)
@@ -510,6 +503,7 @@ export default function BasePage() {
       updateCellMutation,
       selectedCell,
       handleDeleteColumn,
+      handleDeleteRow,
     ]);
 
   // -----------------------------------------------------------------------
@@ -836,9 +830,9 @@ export default function BasePage() {
                       style={{
                         width: `${header.getSize()}px`,
                         minWidth: `${header.getSize()}px`,
-                        height: "34px",
+                        height: "30px", // Moderate height for header cells
                       }}
-                      className="border-r border-b border-gray-200 px-3 py-1.5 text-left"
+                      className="border-r border-b border-gray-200 px-3 py-1 text-left"
                     >
                       {flexRender(
                         header.column.columnDef.header,
@@ -848,11 +842,11 @@ export default function BasePage() {
                   ))}
                   {/* Extra header for "+ Add field" */}
                   <div
-                    className="border-b border-gray-200 px-3 py-1.5 text-left"
+                    className="border-b border-gray-200 px-3 py-1 text-left"
                     style={{
                       width: "150px",
                       minWidth: "150px",
-                      height: "34px",
+                      height: "30px",
                     }}
                   >
                     <button
