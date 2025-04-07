@@ -58,21 +58,37 @@ export const tableRouter = createTRPCRouter({
     .input(
       z.object({
         tableId: z.string(),
-        // Removed the limit parameter, will fetch all rows
+        searchQuery: z.string().optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
-      const [columns, rows] = await Promise.all([
-        ctx.db.column.findMany({
-          where: { tableId: input.tableId },
-          orderBy: { order: "asc" },
-        }),
-        ctx.db.row.findMany({
-          where: { tableId: input.tableId },
-          orderBy: { order: "asc" },
-          // No limit or offset - fetch all rows
-        }),
-      ]);
+      const { tableId, searchQuery } = input;
+
+      const columns = await ctx.db.column.findMany({
+        where: { tableId },
+        orderBy: { order: "asc" },
+      });
+
+      const orFilter =
+        searchQuery && searchQuery.trim().length > 0
+          ? columns.map((col) => ({
+              data: {
+                path: [col.name],
+                string_contains: searchQuery,
+                mode: "insensitive",
+                equals: undefined,
+                not: undefined,
+              } as Prisma.JsonFilter,
+            }))
+          : undefined;
+
+      const rows = await ctx.db.row.findMany({
+        where: {
+          tableId,
+          ...(orFilter ? { OR: orFilter } : {}),
+        },
+        orderBy: { order: "asc" },
+      });
 
       return {
         columns,

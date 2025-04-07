@@ -32,6 +32,8 @@ import {
   MoreHorizontal,
   Hash,
   TextIcon as LetterText,
+  Search,
+  X,
 } from "lucide-react";
 import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
@@ -134,6 +136,7 @@ function CellRenderer({
   tableId,
   setIsSaving,
   updateCellMutation,
+  searchQuery,
 }: {
   row: { index: number; original: RecordRow };
   column: { id: string };
@@ -147,6 +150,7 @@ function CellRenderer({
   tableId: string | null;
   setIsSaving: React.Dispatch<React.SetStateAction<boolean>>;
   updateCellMutation: { mutate: (input: UpdateCellInput) => void };
+  searchQuery?: string;
 }) {
   const value = row.original[keyName];
   const isSelected =
@@ -210,6 +214,11 @@ function CellRenderer({
     }
   };
 
+  const matchesQuery =
+    searchQuery &&
+    typeof value === "string" &&
+    value.toLowerCase().includes(searchQuery.toLowerCase());
+
   return (
     <div
       className="relative h-full w-full"
@@ -224,7 +233,9 @@ function CellRenderer({
       <input
         ref={inputRef}
         type={fieldType === "number" ? "number" : "text"}
-        className="h-full w-full border-none bg-transparent outline-none"
+        className={`h-full w-full border-none px-2 outline-none ${
+          matchesQuery ? "bg-yellow-100" : "bg-transparent"
+        }`}
         value={
           isEditing
             ? localValue === 0
@@ -279,8 +290,11 @@ function RowNumberCell({
   };
 
   return (
-    <div className="relative flex w-full items-center justify-between">
-      <span className="text-gray-500">{index + 1}</span>
+    <div className="relative flex h-full w-full items-center px-2">
+      {/* Number centered */}
+      <div className="flex-1 text-center text-gray-500">{index + 1}</div>
+
+      {/* Triple dot menu aligned to the right */}
       <button
         ref={buttonRef}
         onClick={handleToggle}
@@ -288,6 +302,7 @@ function RowNumberCell({
       >
         <MoreHorizontal size={16} />
       </button>
+
       {open &&
         popupPos &&
         createPortal(
@@ -330,6 +345,16 @@ export default function BasePage() {
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const parentRef = useRef<HTMLDivElement>(null);
   const initialTableCreationAttempted = useRef(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus search input when modal opens
+  useEffect(() => {
+    if (isSearchModalOpen && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isSearchModalOpen]);
 
   // -----------------------------------------------------------------------
   // Data Fetching & Table Creation (using your table.ts mutations)
@@ -387,8 +412,13 @@ export default function BasePage() {
     isLoading: isTableDataLoading,
     refetch: refetchTableData,
   } = api.table.getTableData.useQuery(
-    { tableId: tableId! },
-    { enabled: !!tableId },
+    {
+      tableId: tableId!,
+      searchQuery,
+    },
+    {
+      enabled: !!tableId,
+    },
   );
 
   useEffect(() => {
@@ -401,6 +431,12 @@ export default function BasePage() {
       setIsLoading(false);
     }
   }, [tableData]);
+
+  useEffect(() => {
+    if (tableId) {
+      void refetchTableData();
+    }
+  }, [searchQuery, tableId]);
 
   // -----------------------------------------------------------------------
   // Column & Row Mutations
@@ -492,6 +528,7 @@ export default function BasePage() {
             tableId={tableId}
             setIsSaving={setIsSaving}
             updateCellMutation={updateCellMutation}
+            searchQuery={searchQuery}
           />
         ),
         meta: { type: col.type } as ColumnMeta,
@@ -802,6 +839,72 @@ export default function BasePage() {
             <span>Share and sync</span>
           </button>
         </div>
+        <div className="relative ml-auto">
+          <button
+            className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100"
+            onClick={() => setIsSearchModalOpen(!isSearchModalOpen)}
+          >
+            <Search className="h-4 w-4" />
+          </button>
+          {isSearchModalOpen && (
+            <div className="absolute top-full right-0 z-50 mt-1 w-96 rounded-md border border-gray-200 bg-gray-50 shadow-md">
+              <div className="flex items-center justify-between p-3">
+                <div className="flex-1">
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Find in view"
+                    className="w-full bg-transparent text-lg text-gray-700 outline-none"
+                  />
+                </div>
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsSearchModalOpen(false);
+                    setSearchQuery("");
+                  }}
+                  className="cursor-pointer rounded-full p-1 text-gray-500 hover:bg-gray-200"
+                >
+                  <X className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="bg-[#f2f2f2] p-3">
+                <p className="text-sm text-gray-600">
+                  Use advanced search options in the{" "}
+                  <span className="inline-flex cursor-pointer items-center text-blue-600">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="mr-1 text-blue-600"
+                    >
+                      <rect
+                        width="18"
+                        height="18"
+                        x="3"
+                        y="3"
+                        rx="2"
+                        ry="2"
+                      ></rect>
+                      <path d="M9 3v18"></path>
+                      <path d="M3 9h18"></path>
+                    </svg>
+                    search extension
+                  </span>
+                </p>
+                <p className="mt-2 text-gray-600">.</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Table Body */}
@@ -928,8 +1031,9 @@ export default function BasePage() {
                         style={{
                           width: `${cell.column.getSize()}px`,
                           minWidth: `${cell.column.getSize()}px`,
+                          height: "100%", // Match row height
                         }}
-                        className="border-r border-gray-100 px-4 py-2"
+                        className="border-r border-gray-100"
                       >
                         {flexRender(
                           cell.column.columnDef.cell,
