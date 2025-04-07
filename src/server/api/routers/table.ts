@@ -284,20 +284,33 @@ export const tableRouter = createTRPCRouter({
     .input(
       z.object({
         tableId: z.string(),
-        rows: z.array(z.record(z.union([z.string(), z.number(), z.null()]))),
+        rows: z.array(
+          z.record(z.string(), z.union([z.string(), z.number(), z.null()])),
+        ),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // 1. Get the current max order
+      const lastRow = await ctx.db.row.findFirst({
+        where: { tableId: input.tableId },
+        orderBy: { order: "desc" },
+      });
+
+      let currentOrder = lastRow?.order ?? 0;
+
+      // 2. Add rows with incrementing order
       const createdRows = [];
       for (const rowData of input.rows) {
         const row = await ctx.db.row.create({
           data: {
             tableId: input.tableId,
-            data: rowData as Prisma.InputJsonValue,
+            order: ++currentOrder,
+            data: rowData,
           },
         });
         createdRows.push(row);
       }
+
       return createdRows;
     }),
 

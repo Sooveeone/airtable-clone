@@ -641,42 +641,43 @@ export default function BasePage() {
     }
   };
 
-  const handleAddFakeRecords = (count: number) => {
+  const handleAddFakeRecords = async (count: number) => {
     if (!tableId) return;
     setIsSaving(true);
-    const batchSize = 100;
+    const batchSize = 100; // Number of rows per batch
     const batches = Math.ceil(count / batchSize);
-    const processBatch = async (batchIndex: number) => {
-      if (batchIndex >= batches) {
-        setIsSaving(false);
-        void refetchTableData();
-        return;
-      }
-      const batchCount = Math.min(batchSize, count - batchIndex * batchSize);
+
+    const allFakeRecords: RecordRow[] = [];
+
+    for (let i = 0; i < batches; i++) {
+      const batchCount = Math.min(batchSize, count - i * batchSize);
       const fakeRecords = Array.from({ length: batchCount }, () =>
         generateFakeRecord(columns),
       );
+
       try {
-        if (batchCount > 1) {
-          await createRowsMutation.mutateAsync({
-            tableId,
-            rows: fakeRecords,
-          });
-        } else {
-          for (const record of fakeRecords) {
-            await createRowMutation.mutateAsync({
-              tableId,
-              defaultData: record,
-            });
-          }
-        }
-        void processBatch(batchIndex + 1);
+        const res = await createRowsMutation.mutateAsync({
+          tableId,
+          rows: fakeRecords,
+        });
+
+        const newFormattedRows = res.map((row) => ({
+          id: row.id,
+          ...(row.data as Record<string, string | number | null>),
+        }));
+
+        // Append new rows to data and show them on screen
+        setData((prev) => [...prev, ...newFormattedRows]);
+
+        // Optional: Give time for UI to catch up (good for slower devices)
+        await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (err) {
-        console.error("Failed to create rows:", err);
-        setIsSaving(false);
+        console.error("Failed to create batch:", err);
+        break;
       }
-    };
-    void processBatch(0);
+    }
+
+    setIsSaving(false);
   };
 
   const table = useReactTable({
@@ -1064,11 +1065,11 @@ export default function BasePage() {
           + Add record
         </button>
         <button
-          onClick={() => handleAddFakeRecords(10000)}
+          onClick={() => handleAddFakeRecords(100000)}
           className="text-blue-600 hover:underline"
-          disabled
+          disabled={isSaving}
         >
-          Add 10000 rows
+          Add 100000 rows
         </button>
       </div>
     </div>
