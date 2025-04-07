@@ -1,7 +1,6 @@
 "use client";
 
 import type React from "react";
-
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import {
@@ -30,22 +29,26 @@ import {
   Loader2,
   CircleHelp,
   Plus,
+  MoreHorizontal,
+  Hash,
+  TextIcon as LetterText,
 } from "lucide-react";
 import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
+import { createPortal } from "react-dom";
 
-// Define proper column meta type
+// -------------------------------------------------------------------------
+// Types and Helpers
+// -------------------------------------------------------------------------
 interface ColumnMeta {
   type?: "text" | "number";
 }
 
-// Define the record type
 type RecordRow = Record<string, string | number | null> & { id?: string };
 type ColumnValue = string | number | null;
 
 const defaultColumnsKeys = ["name", "notes", "assignee", "status"];
 
-// Generate a fake record based on given columns
 const generateFakeRecord = (
   columns: AccessorKeyColumnDef<RecordRow, ColumnValue>[],
 ): RecordRow => {
@@ -63,25 +66,37 @@ const generateFakeRecord = (
   return record;
 };
 
+// -------------------------------------------------------------------------
+// UI Components
+// -------------------------------------------------------------------------
 function ColumnHeader({
   name,
   onDelete,
+  type = "text",
 }: {
   name: string;
   onDelete: () => void;
+  type?: "text" | "number";
 }) {
   const [open, setOpen] = useState(false);
+
+  // Determine which icon to show based on column type
+  const TypeIcon = type === "number" ? Hash : LetterText;
+
   return (
-    <div className="relative inline-block">
+    <div className="relative h-full w-full">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 rounded px-1 py-0.5 transition-colors duration-150 hover:bg-gray-100"
-        title="Click to open options"
+        className="flex h-full w-full items-center space-x-1 px-2 hover:bg-gray-100"
+        title={name}
       >
-        <span>{name.charAt(0).toUpperCase() + name.slice(1)}</span>
+        <TypeIcon size={14} className="flex-shrink-0 text-gray-500" />
+        <span className="min-w-0 flex-1 truncate text-left text-sm">
+          {name.charAt(0).toUpperCase() + name.slice(1)}
+        </span>
         <ChevronDown
           size={14}
-          className={`text-gray-100 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`flex-shrink-0 text-gray-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && (
@@ -101,9 +116,6 @@ function ColumnHeader({
   );
 }
 
-// -------------------------------------------------------------------------
-// Top‑level CellRenderer component
-// -------------------------------------------------------------------------
 type UpdateCellInput = {
   tableId: string;
   rowId: string;
@@ -134,35 +146,28 @@ function CellRenderer({
   setData: React.Dispatch<React.SetStateAction<RecordRow[]>>;
   tableId: string | null;
   setIsSaving: React.Dispatch<React.SetStateAction<boolean>>;
-  updateCellMutation: {
-    mutate: (input: UpdateCellInput) => void;
-  };
+  updateCellMutation: { mutate: (input: UpdateCellInput) => void };
 }) {
   const value = row.original[keyName];
   const isSelected =
     selectedCell?.rowIndex === row.index &&
     selectedCell?.columnId === column.id;
-
-  // Local state for cell editing
   const [localValue, setLocalValue] = useState<string | number | null>(
     value === 0 && fieldType === "number" ? 0 : (value ?? ""),
   );
   const [isEditing, setIsEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Update local state when external value changes
   useEffect(() => {
     setLocalValue(value === 0 && fieldType === "number" ? 0 : (value ?? ""));
   }, [value, fieldType]);
 
-  // Auto-focus the input if this cell is selected
   useEffect(() => {
     if (isSelected && inputRef.current) {
       inputRef.current.focus();
     }
   }, [isSelected]);
 
-  // Handle saving the cell data
   const saveCell = () => {
     if (!isEditing) return;
     const newValue =
@@ -172,13 +177,11 @@ function CellRenderer({
           : Number(localValue)
         : localValue;
     if (newValue !== value) {
-      // Optimistically update the row data
       setData((prev) =>
         prev.map((item) =>
           item.id === row.original.id ? { ...item, [keyName]: newValue } : item,
         ),
       );
-      // Persist the update if possible
       if (tableId && row.original.id) {
         setIsSaving(true);
         updateCellMutation.mutate({
@@ -249,6 +252,69 @@ function CellRenderer({
 }
 
 // -------------------------------------------------------------------------
+// NEW: RowNumberCell component
+// -------------------------------------------------------------------------
+
+function RowNumberCell({
+  index,
+  onDeleteRow,
+}: {
+  index: number;
+  onDeleteRow: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [popupPos, setPopupPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPopupPos({ top: rect.top, left: rect.left });
+    }
+    setOpen(!open);
+  };
+
+  return (
+    <div className="relative flex w-full items-center justify-between">
+      <span className="text-gray-500">{index + 1}</span>
+      <button
+        ref={buttonRef}
+        onClick={handleToggle}
+        className="text-gray-400 hover:text-gray-600"
+      >
+        <MoreHorizontal size={16} />
+      </button>
+      {open &&
+        popupPos &&
+        createPortal(
+          <div
+            className="fixed z-50 w-28 rounded border bg-white shadow-md"
+            style={{
+              left: popupPos.left,
+              top: popupPos.top - 45,
+            }}
+          >
+            <button
+              className="block w-full cursor-pointer px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+              onClick={() => {
+                onDeleteRow();
+                setOpen(false);
+              }}
+            >
+              Delete row
+            </button>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------------
 // BasePage Component
 // -------------------------------------------------------------------------
 export default function BasePage() {
@@ -261,31 +327,39 @@ export default function BasePage() {
   const [tableId, setTableId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  // New state for tracking column addition progress
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const parentRef = useRef<HTMLDivElement>(null);
   const initialTableCreationAttempted = useRef(false);
 
-  // Fetch base info
+  // -----------------------------------------------------------------------
+  // Data Fetching & Table Creation (using your table.ts mutations)
+  // -----------------------------------------------------------------------
   const { data: base, isLoading: isBaseLoading } = api.base.getById.useQuery({
     baseId: baseId as string,
   });
-
-  // Fetch tables for this base
   const { data: tables, isLoading: isTablesLoading } =
     api.table.getTablesForBase.useQuery(
       { baseId: baseId as string },
       { enabled: !!baseId },
     );
 
-  // Create a default table if none exists
   const createTableMutation = api.table.createTable.useMutation({
     onSuccess: (newTable) => {
       setTableId(newTable.id);
     },
   });
 
-  // Mutation for updating cell values (types inferred from router)
+  const handleAddTable = () => {
+    if (!baseId) return;
+    const newTableName =
+      tables && tables.length > 0 ? `Table ${tables.length + 1}` : "Table 1";
+    createTableMutation.mutate({
+      baseId: baseId as string,
+      name: newTableName,
+      columns: defaultColumnsKeys.map((name) => ({ name, type: "text" })),
+    });
+  };
+
   const updateCellMutation = api.table.updateCell.useMutation({
     onSuccess: () => {
       setIsSaving(false);
@@ -296,7 +370,6 @@ export default function BasePage() {
     },
   });
 
-  // When tables data arrives, choose an existing table or create a new one
   useEffect(() => {
     if (initialTableCreationAttempted.current) return;
     if (isTablesLoading || !tables) return;
@@ -320,7 +393,6 @@ export default function BasePage() {
     }
   }, [tables, isTablesLoading, baseId, createTableMutation]);
 
-  // Fetch table data once a table is selected
   const {
     data: tableData,
     isLoading: isTableDataLoading,
@@ -330,7 +402,6 @@ export default function BasePage() {
     { enabled: !!tableId },
   );
 
-  // When tableData is available, format and set the rows
   useEffect(() => {
     if (tableData) {
       const formattedData = tableData.rows.map((row) => ({
@@ -342,7 +413,9 @@ export default function BasePage() {
     }
   }, [tableData]);
 
-  // Wrap the delete column function in useCallback
+  // -----------------------------------------------------------------------
+  // Column & Row Mutations
+  // -----------------------------------------------------------------------
   const deleteColumnMutation = api.table.deleteColumn.useMutation({
     onSuccess: () => {
       void refetchTableData();
@@ -366,16 +439,53 @@ export default function BasePage() {
     [tableId, deleteColumnMutation],
   );
 
-  // Compute column definitions using useMemo.
+  const deleteRowMutation = api.table.deleteRow.useMutation({
+    onSuccess: () => {
+      void refetchTableData();
+    },
+    onError: (error) => {
+      console.error("Failed to delete row:", error);
+    },
+  });
+  function handleDeleteRow(rowId: string) {
+    if (!tableId || !rowId) return;
+    deleteRowMutation.mutate({ tableId, rowId });
+  }
+
+  // -----------------------------------------------------------------------
+  // Build Columns (Prepending the row number column)
+  // -----------------------------------------------------------------------
   const columns: AccessorKeyColumnDef<RecordRow, ColumnValue>[] =
     useMemo(() => {
       if (!tableData) return [];
-      return tableData.columns.map((col) => ({
+      const rowNumberColumn: AccessorKeyColumnDef<RecordRow, ColumnValue> = {
+        accessorKey: "rowNumber",
+        id: "rowNumber",
+        header: () => (
+          <div className="flex h-full w-full items-center justify-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"
+            />
+          </div>
+        ),
+        size: 80,
+        enableResizing: false,
+        cell: ({ row }) => (
+          <RowNumberCell
+            index={row.index}
+            onDeleteRow={() => handleDeleteRow(row.original.id ?? "")}
+          />
+        ),
+      };
+
+      const dataColumns = tableData.columns.map((col) => ({
         accessorKey: col.name,
         header: () => (
           <ColumnHeader
             name={col.name}
             onDelete={() => handleDeleteColumn(col.name)}
+            type={col.type as "text" | "number"}
           />
         ),
         cell: (props: CellContext<RecordRow, ColumnValue>) => (
@@ -393,6 +503,7 @@ export default function BasePage() {
         ),
         meta: { type: col.type } as ColumnMeta,
       }));
+      return [rowNumberColumn, ...dataColumns];
     }, [
       tableData,
       tableId,
@@ -401,7 +512,9 @@ export default function BasePage() {
       handleDeleteColumn,
     ]);
 
-  // Mutation to add a new row
+  // -----------------------------------------------------------------------
+  // Row & Column Creation Mutations
+  // -----------------------------------------------------------------------
   const createRowMutation = api.table.createRow.useMutation({
     onSuccess: (newRow) => {
       setData((prev) => [
@@ -414,13 +527,11 @@ export default function BasePage() {
     },
   });
 
-  // Mutation to add a new column
   const createColumnMutation = api.table.createColumn.useMutation({
     onSuccess: () => {
       if (tableId) {
         void refetchTableData();
       }
-      // When finished adding the column, stop the loading state.
       setIsAddingColumn(false);
     },
     onError: (error) => {
@@ -429,7 +540,6 @@ export default function BasePage() {
     },
   });
 
-  // State and handler for the "add field" modal
   const [newFieldName, setNewFieldName] = useState("");
   const [newFieldType, setNewFieldType] = useState<"text" | "number">("text");
   const [fieldError, setFieldError] = useState("");
@@ -455,22 +565,21 @@ export default function BasePage() {
       name: newFieldName,
       type: newFieldType,
     });
-    // Optionally, you can also update local data optimistically here.
     setNewFieldName("");
     setNewFieldType("text");
     setFieldError("");
     setIsFieldModalOpen(false);
   };
 
-  // Mutation to create multiple rows at once
   const createRowsMutation = api.table.createRows.useMutation();
 
   const createRowHandler = async () => {
     if (!tableId) return;
-    if (isSaving) return; // Prevent multiple concurrent requests
+    if (isSaving) return;
     setIsSaving(true);
     const defaultData: Record<string, string | number | null> = {};
     columns.forEach((col) => {
+      if (!col.accessorKey) return;
       const key = col.accessorKey;
       const meta = col.meta as ColumnMeta | undefined;
       defaultData[key] =
@@ -632,20 +741,15 @@ export default function BasePage() {
       {/* Table Header */}
       <div className="flex h-8 items-center justify-between bg-[#4c505b] px-4 text-sm">
         <div className="flex h-full items-center gap-2">
-          {/* Table 1 with dropdown in white container */}
           <div className="h-full">
             <div className="flex h-full items-center rounded-t-md bg-white px-4">
               <span className="font-small mr-2 text-base text-sm">Table 1</span>
               <ChevronDown size={16} className="text-gray-500" />
             </div>
           </div>
-
-          {/* Chevron down */}
           <div className="flex h-full items-center px-2">
             <ChevronDown size={16} className="text-white" />
           </div>
-
-          {/* Plus/Add or import */}
           <div className="flex h-full items-center">
             <Plus size={16} className="mr-1 text-white" />
             <span className="text-sm font-light text-gray-200">
@@ -653,8 +757,6 @@ export default function BasePage() {
             </span>
           </div>
         </div>
-
-        {/* Right side with Extensions and Tools */}
         <div className="flex items-center gap-6">
           <span className="text-sm font-light text-gray-100">Extensions</span>
           <div className="flex items-center gap-1">
@@ -664,7 +766,7 @@ export default function BasePage() {
         </div>
       </div>
 
-      {/*Column Toolbar*/}
+      {/* Column Toolbar */}
       <div className="flex items-center border-b bg-white px-4 py-2 text-sm shadow-sm">
         <div className="flex items-center gap-1">
           <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
@@ -707,6 +809,7 @@ export default function BasePage() {
           </button>
         </div>
       </div>
+
       {/* Table Body */}
       <div
         className="flex-1 overflow-auto bg-white"
@@ -724,7 +827,7 @@ export default function BasePage() {
             onClick={() => setSelectedCell(null)}
           >
             {/* Table Header Row */}
-            <div className="font-small sticky top-0 z-10 flex bg-[#f4f4f4] text-gray-800">
+            <div className="font-small sticky top-0 z-10 flex bg-[#f4f4f4] text-sm text-gray-800">
               {table.getHeaderGroups().map((headerGroup) => (
                 <div key={headerGroup.id} className="flex w-full">
                   {headerGroup.headers.map((header) => (
@@ -733,8 +836,9 @@ export default function BasePage() {
                       style={{
                         width: `${header.getSize()}px`,
                         minWidth: `${header.getSize()}px`,
+                        height: "34px",
                       }}
-                      className="border-r border-b border-gray-200 px-4 py-2 text-left"
+                      className="border-r border-b border-gray-200 px-3 py-1.5 text-left"
                     >
                       {flexRender(
                         header.column.columnDef.header,
@@ -744,8 +848,12 @@ export default function BasePage() {
                   ))}
                   {/* Extra header for "+ Add field" */}
                   <div
-                    className="border-b border-gray-200 px-4 py-2 text-left"
-                    style={{ width: "150px", minWidth: "150px" }}
+                    className="border-b border-gray-200 px-3 py-1.5 text-left"
+                    style={{
+                      width: "150px",
+                      minWidth: "150px",
+                      height: "34px",
+                    }}
                   >
                     <button
                       onClick={() => {
@@ -754,7 +862,7 @@ export default function BasePage() {
                           setFieldError("");
                         }
                       }}
-                      className="cursor-pointer px-2 py-1 text-sm hover:underline"
+                      className="cursor-pointer px-2 py-0.5 text-sm hover:underline"
                       disabled={isAddingColumn}
                     >
                       {isAddingColumn ? "Adding..." : "+ Add field"}
