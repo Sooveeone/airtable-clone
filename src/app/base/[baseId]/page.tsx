@@ -701,7 +701,7 @@ export default function BasePage() {
     setIsSaving(true);
     
     // Use a much smaller batch size for Vercel deployment (to stay under 2MB limit)
-    const batchSize = 5; // Reduced from 20 to 5 rows per batch
+    const batchSize = 20; // Reduced from 20 to 5 rows per batch
     const batches = Math.ceil(count / batchSize);
     let successCount = 0;
     let failureCount = 0;
