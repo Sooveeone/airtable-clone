@@ -39,7 +39,6 @@ import {
 import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 
 // -------------------------------------------------------------------------
 // Types and Helpers
@@ -700,70 +699,38 @@ export default function BasePage() {
   const handleAddFakeRecords = async (count: number) => {
     if (!tableId) return;
     setIsSaving(true);
-    
-    // Use a much smaller batch size for Vercel deployment (to stay under 2MB limit)
-    const batchSize = 30; // Reduced from 20 to 5 rows per batch
+    const batchSize = 30; // Number of rows per batch
     const batches = Math.ceil(count / batchSize);
-    let successCount = 0;
-    let failureCount = 0;
 
-    try {
-      for (let i = 0; i < batches; i++) {
-        const batchCount = Math.min(batchSize, count - i * batchSize);
-        const fakeRecords = Array.from({ length: batchCount }, () =>
-          generateFakeRecord(columns)
-        );
+    for (let i = 0; i < batches; i++) {
+      const batchCount = Math.min(batchSize, count - i * batchSize);
+      const fakeRecords = Array.from({ length: batchCount }, () =>
+        generateFakeRecord(columns)
+      );
 
-        try {
-          // Add a longer delay between batches to avoid rate limiting
-          if (i > 0) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
+      try {
+        const res = await createRowsMutation.mutateAsync({
+          tableId,
+          rows: fakeRecords,
+        });
 
-          const res = await createRowsMutation.mutateAsync({
-            tableId,
-            rows: fakeRecords,
-          });
+        const newFormattedRows = res.map((row) => ({
+          id: row.id,
+          ...(row.data as Record<string, string | number | null>),
+        }));
 
-          const newFormattedRows = res.map((row) => ({
-            id: row.id,
-            ...(row.data as Record<string, string | number | null>),
-          }));
+        // Append new rows to data and show them on screen
+        setData((prev) => [...prev, ...newFormattedRows]);
 
-          // Append new rows to data and show them on screen
-          setData((prev) => [...prev, ...newFormattedRows]);
-          successCount += batchCount;
-
-          // Log progress to console
-          console.log(`Batch ${i + 1}/${batches} completed. Added ${successCount} rows so far.`);
-        } catch (err) {
-          console.error("Failed to create batch:", err);
-          failureCount += batchCount;
-          
-          // If we get a payload size error, reduce batch size further
-          if (err instanceof Error && 
-              (err.message.includes("413") || 
-               err.message.includes("payload") || 
-               err.message.includes("too large"))) {
-            console.log("Payload size error detected. Reducing batch size...");
-            // We can't modify batchSize here, but we can log it for future reference
-          }
-          
-          // Continue with next batch
-          continue;
-        }
+        // Optional: Give time for UI to catch up (good for slower devices)
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } catch (err) {
+        console.error("Failed to create batch:", err);
+        break;
       }
-      
-      // Log final results
-      console.log(`Row creation completed. Successfully added ${successCount} rows. Failed to add ${failureCount} rows.`);
-      
-      // If we had failures, show a message to the user
-      if (failureCount > 0) {
-        alert(`Successfully added ${successCount} rows, but failed to add ${failureCount} rows. This might be due to Vercel's limitations. Try adding fewer rows at a time.`);
-      }
-    } finally {
-      setIsSaving(false);
     }
+
+    setIsSaving(false);
   };
 
   const table = useReactTable({
@@ -802,7 +769,7 @@ export default function BasePage() {
       >
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
-            <Link href="/" className="flex h-8 w-8 items-center justify-center rounded">
+            <div className="flex h-8 w-8 items-center justify-center rounded">
               <Image
                 src="/airtable-svgrepo-com.svg"
                 alt="Airtable Logo"
@@ -810,7 +777,7 @@ export default function BasePage() {
                 height={20}
                 className="object-contain"
               />
-            </Link>
+            </div>
             <h1 className="flex items-center gap-1 text-lg font-bold text-gray-100 hover:text-white">
               {isBaseLoading ? "Loading..." : base?.name ?? "Untitled Base 2"}
               <ChevronDown size={16} className="text-gray-100" />
@@ -1177,7 +1144,7 @@ export default function BasePage() {
           className="text-blue-600 hover:underline"
           disabled={isSaving}
         >
-          {isSaving ? "Adding rows..." : "Add 100000 rows"}
+          Add 100000 rows
         </button>
       </div>
     </div>

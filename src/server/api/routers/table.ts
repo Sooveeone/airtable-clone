@@ -321,21 +321,17 @@ export const tableRouter = createTRPCRouter({
 
       let currentOrder = lastRow?.order ?? 0;
 
-      // 2. Prepare rows with incrementing order
-      const rowsToCreate = input.rows.map((rowData) => ({
-        tableId: input.tableId,
-        order: ++currentOrder,
-        data: rowData,
-      }));
-
-      // 3. Since we're now sending very small batches from the frontend,
-      // we can simplify this part and just create the rows directly
+      // 2. Add rows with incrementing order
       const createdRows = [];
-      for (const row of rowsToCreate) {
-        const createdRow = await ctx.db.row.create({
-          data: row,
+      for (const rowData of input.rows) {
+        const row = await ctx.db.row.create({
+          data: {
+            tableId: input.tableId,
+            order: ++currentOrder,
+            data: rowData,
+          },
         });
-        createdRows.push(createdRow);
+        createdRows.push(row);
       }
 
       return createdRows;
