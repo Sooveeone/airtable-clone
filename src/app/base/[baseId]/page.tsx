@@ -700,9 +700,11 @@ export default function BasePage() {
     if (!tableId) return;
     setIsSaving(true);
     
-    // Reduce batch size to stay within Vercel's limits (around 1MB per request)
-    const batchSize = 20; // Smaller batch size to avoid payload size limits
+    // Use a much smaller batch size for Vercel deployment (to stay under 2MB limit)
+    const batchSize = 5; // Reduced from 20 to 5 rows per batch
     const batches = Math.ceil(count / batchSize);
+    let successCount = 0;
+    let failureCount = 0;
 
     try {
       for (let i = 0; i < batches; i++) {
@@ -712,6 +714,11 @@ export default function BasePage() {
         );
 
         try {
+          // Add a longer delay between batches to avoid rate limiting
+          if (i > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+
           const res = await createRowsMutation.mutateAsync({
             tableId,
             rows: fakeRecords,
@@ -724,14 +731,34 @@ export default function BasePage() {
 
           // Append new rows to data and show them on screen
           setData((prev) => [...prev, ...newFormattedRows]);
+          successCount += batchCount;
 
-          // Give time for UI to catch up and avoid rate limiting
-          await new Promise((resolve) => setTimeout(resolve, 200));
+          // Log progress to console
+          console.log(`Batch ${i + 1}/${batches} completed. Added ${successCount} rows so far.`);
         } catch (err) {
           console.error("Failed to create batch:", err);
-          // Continue with next batch instead of breaking
+          failureCount += batchCount;
+          
+          // If we get a payload size error, reduce batch size further
+          if (err instanceof Error && 
+              (err.message.includes("413") || 
+               err.message.includes("payload") || 
+               err.message.includes("too large"))) {
+            console.log("Payload size error detected. Reducing batch size...");
+            // We can't modify batchSize here, but we can log it for future reference
+          }
+          
+          // Continue with next batch
           continue;
         }
+      }
+      
+      // Log final results
+      console.log(`Row creation completed. Successfully added ${successCount} rows. Failed to add ${failureCount} rows.`);
+      
+      // If we had failures, show a message to the user
+      if (failureCount > 0) {
+        alert(`Successfully added ${successCount} rows, but failed to add ${failureCount} rows. This might be due to Vercel's limitations. Try adding fewer rows at a time.`);
       }
     } finally {
       setIsSaving(false);

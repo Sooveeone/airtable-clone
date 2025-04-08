@@ -328,24 +328,14 @@ export const tableRouter = createTRPCRouter({
         data: rowData,
       }));
 
-      // 3. Use a more efficient approach for batch creation
-      // Process in smaller chunks to avoid transaction timeouts
-      const chunkSize = 50;
-      const chunks = [];
-      for (let i = 0; i < rowsToCreate.length; i += chunkSize) {
-        chunks.push(rowsToCreate.slice(i, i + chunkSize));
-      }
-
+      // 3. Since we're now sending very small batches from the frontend,
+      // we can simplify this part and just create the rows directly
       const createdRows = [];
-      for (const chunk of chunks) {
-        const chunkResults = await ctx.db.$transaction(
-          chunk.map((row) => 
-            ctx.db.row.create({
-              data: row,
-            })
-          )
-        );
-        createdRows.push(...chunkResults);
+      for (const row of rowsToCreate) {
+        const createdRow = await ctx.db.row.create({
+          data: row,
+        });
+        createdRows.push(createdRow);
       }
 
       return createdRows;
