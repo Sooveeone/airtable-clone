@@ -375,9 +375,6 @@ export default function BasePage() {
   // Add a ref to track if the bulk row addition should be cancelled
   const shouldCancelBulkRowsRef = useRef(false);
 
-  // Add a state to track when to force a refresh
-  const [forceRefresh, setForceRefresh] = useState(0);
-
   // Focus search input when modal opens
   useEffect(() => {
     if (isSearchModalOpen && searchInputRef.current) {
@@ -665,9 +662,6 @@ export default function BasePage() {
             [newColumn.name]: newColumn.type === "number" ? null : ""
           }))
         );
-        
-        // Increment the force refresh counter to trigger a re-render
-        setForceRefresh(prev => prev + 1);
       }
       setIsAddingColumn(false);
     },
@@ -726,7 +720,7 @@ export default function BasePage() {
       if (!col.accessorKey) return;
       const key = col.accessorKey;
       const meta = col.meta as ColumnMeta | undefined;
-      const columnType = meta?.type || "text"; // Default to text if not specified
+      const columnType = meta?.type ?? "text"; // Default to text if not specified
       
       defaultData[key] =
         columnType === "number"
