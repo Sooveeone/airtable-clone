@@ -39,6 +39,7 @@ import {
 import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 
 // -------------------------------------------------------------------------
 // Types and Helpers
@@ -701,7 +702,7 @@ export default function BasePage() {
     setIsSaving(true);
     
     // Use a much smaller batch size for Vercel deployment (to stay under 2MB limit)
-    const batchSize = 20; // Reduced from 20 to 5 rows per batch
+    const batchSize = 30; // Reduced from 20 to 5 rows per batch
     const batches = Math.ceil(count / batchSize);
     let successCount = 0;
     let failureCount = 0;
@@ -801,7 +802,7 @@ export default function BasePage() {
       >
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded">
+            <Link href="/" className="flex h-8 w-8 items-center justify-center rounded">
               <Image
                 src="/airtable-svgrepo-com.svg"
                 alt="Airtable Logo"
@@ -809,7 +810,7 @@ export default function BasePage() {
                 height={20}
                 className="object-contain"
               />
-            </div>
+            </Link>
             <h1 className="flex items-center gap-1 text-lg font-bold text-gray-100 hover:text-white">
               {isBaseLoading ? "Loading..." : base?.name ?? "Untitled Base 2"}
               <ChevronDown size={16} className="text-gray-100" />
