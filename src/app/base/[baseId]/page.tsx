@@ -9,6 +9,7 @@ import {
   flexRender,
   type AccessorKeyColumnDef,
   type CellContext,
+  type Row,
 } from "@tanstack/react-table";
 import { faker } from "@faker-js/faker";
 import { api } from "@/trpc/react";
@@ -52,7 +53,7 @@ type ColumnValue = string | number | null;
 const defaultColumnsKeys = ["name", "notes", "assignee", "status"];
 
 const generateFakeRecord = (
-  columns: AccessorKeyColumnDef<RecordRow, ColumnValue>[],
+  columns: AccessorKeyColumnDef<RecordRow, ColumnValue>[]
 ): RecordRow => {
   const record: RecordRow = {};
   for (const col of columns) {
@@ -98,7 +99,9 @@ function ColumnHeader({
         </span>
         <ChevronDown
           size={14}
-          className={`flex-shrink-0 text-gray-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`flex-shrink-0 text-gray-500 transition-transform duration-150 ${
+            open ? "rotate-180" : ""
+          }`}
         />
       </button>
       {open && (
@@ -157,13 +160,13 @@ function CellRenderer({
     selectedCell?.rowIndex === row.index &&
     selectedCell?.columnId === column.id;
   const [localValue, setLocalValue] = useState<string | number | null>(
-    value === 0 && fieldType === "number" ? 0 : (value ?? ""),
+    value === 0 && fieldType === "number" ? 0 : value ?? ""
   );
   const [isEditing, setIsEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setLocalValue(value === 0 && fieldType === "number" ? 0 : (value ?? ""));
+    setLocalValue(value === 0 && fieldType === "number" ? 0 : value ?? "");
   }, [value, fieldType]);
 
   useEffect(() => {
@@ -183,8 +186,8 @@ function CellRenderer({
     if (newValue !== value) {
       setData((prev) =>
         prev.map((item) =>
-          item.id === row.original.id ? { ...item, [keyName]: newValue } : item,
-        ),
+          item.id === row.original.id ? { ...item, [keyName]: newValue } : item
+        )
       );
       if (tableId && row.original.id) {
         setIsSaving(true);
@@ -206,7 +209,7 @@ function CellRenderer({
       setSelectedCell(null);
     } else if (e.key === "Escape") {
       e.preventDefault();
-      setLocalValue(value === 0 && fieldType === "number" ? 0 : (value ?? ""));
+      setLocalValue(value === 0 && fieldType === "number" ? 0 : value ?? "");
       setIsEditing(false);
       setSelectedCell(null);
     } else if (!isEditing) {
@@ -241,10 +244,10 @@ function CellRenderer({
           isEditing
             ? localValue === 0
               ? "0"
-              : (localValue ?? "")
+              : localValue ?? ""
             : value === 0
-              ? "0"
-              : (value ?? "")
+            ? "0"
+            : value ?? ""
         }
         onChange={(e) => {
           const val =
@@ -324,7 +327,7 @@ function RowNumberCell({
               Delete row
             </button>
           </div>,
-          document.body,
+          document.body
         )}
     </div>
   );
@@ -341,7 +344,6 @@ export default function BasePage() {
     columnId: string;
   } | null>(null);
   const [tableId, setTableId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const parentRef = useRef<HTMLDivElement>(null);
@@ -349,6 +351,8 @@ export default function BasePage() {
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Focus search input when modal opens
   useEffect(() => {
@@ -366,7 +370,7 @@ export default function BasePage() {
   const { data: tables, isLoading: isTablesLoading } =
     api.table.getTablesForBase.useQuery(
       { baseId: baseId as string },
-      { enabled: !!baseId },
+      { enabled: !!baseId }
     );
 
   const createTableMutation = api.table.createTable.useMutation({
@@ -403,48 +407,72 @@ export default function BasePage() {
           onSuccess: (newTable) => {
             setTableId(newTable.id);
           },
-        },
+        }
       );
     }
   }, [tables, isTablesLoading, baseId, createTableMutation]);
 
+  // Use standard query instead of useInfiniteQuery
   const {
     data: tableData,
-    isLoading: isTableDataLoading,
-    refetch: refetchTableData,
-  } = api.table.getTableData.useQuery(
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = api.table.getTableData.useInfiniteQuery(
     {
-      tableId: tableId!,
+      tableId: tableId ?? "",
+      limit: 50,
       searchQuery,
     },
     {
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
       enabled: !!tableId,
-    },
+    }
   );
 
+  // Track if we're in the middle of loading more data
+  const isLoadingMoreRef = useRef(false);
+  const dataRef = useRef<RecordRow[]>([]);
+
+  // Add a ref to track deleted row IDs
+  const deletedRowIdsRef = useRef<Set<string>>(new Set());
+
+  // Update the useEffect that processes tableData to respect deleted rows
   useEffect(() => {
     if (tableData) {
-      const formattedData = tableData.rows.map((row) => ({
-        id: row.id,
-        ...(row.data as Record<string, string | number | null>),
-      }));
+      // Combine all rows from all pages
+      const allRows = tableData.pages.flatMap((page) => page.rows);
+      const formattedData = allRows
+        .filter(row => !deletedRowIdsRef.current.has(row.id))
+        .map((row) => ({
+          id: row.id,
+          ...(row.data as Record<string, string | number | null>),
+        }));
+
+      // Update the data state
       setData(formattedData);
-      setIsLoading(false);
+      dataRef.current = formattedData;
+
+      setIsInitialLoading(false);
+      setIsLoadingMore(false);
+      isLoadingMoreRef.current = false;
     }
   }, [tableData]);
 
+  // Initialize dataRef when data changes
   useEffect(() => {
-    if (tableId) {
-      void refetchTableData();
-    }
-  }, [searchQuery, tableId, refetchTableData]);
+    dataRef.current = data;
+  }, [data]);
 
   // -----------------------------------------------------------------------
   // Column & Row Mutations
   // -----------------------------------------------------------------------
   const deleteColumnMutation = api.table.deleteColumn.useMutation({
     onSuccess: () => {
-      void refetchTableData();
+      // Refetch the table data after deleting a column
+      if (tableId) {
+        void fetchNextPage();
+      }
     },
     onError: (err) => {
       console.error("Failed to delete column:", err);
@@ -458,16 +486,24 @@ export default function BasePage() {
           const newRow = { ...row };
           delete newRow[name];
           return newRow;
-        }),
+        })
       );
       deleteColumnMutation.mutate({ tableId, columnName: name });
     },
-    [tableId, deleteColumnMutation],
+    [tableId, deleteColumnMutation]
   );
 
+  // Update the deleteRowMutation to track deleted rows
   const deleteRowMutation = api.table.deleteRow.useMutation({
-    onSuccess: () => {
-      void refetchTableData();
+    onSuccess: (_, variables) => {
+      // Add the deleted row ID to our tracking set
+      deletedRowIdsRef.current.add(variables.rowId);
+      
+      // Immediately update the UI by removing the deleted row
+      setData((prevData) => prevData.filter((row) => row.id !== variables.rowId));
+      
+      // We don't need to refetch or invalidate the query
+      // The deleted row will be filtered out in the useEffect above
     },
     onError: (error) => {
       console.error("Failed to delete row:", error);
@@ -479,15 +515,23 @@ export default function BasePage() {
       if (!tableId || !rowId) return;
       deleteRowMutation.mutate({ tableId, rowId });
     },
-    [tableId, deleteRowMutation],
+    [tableId, deleteRowMutation]
   );
 
   // -----------------------------------------------------------------------
   // Build Columns (Prepending the row number column)
   // -----------------------------------------------------------------------
+  // Add type for the table data
+  interface TableColumn {
+    name: string;
+    type: string;
+  }
+
+  // Update the columns definition with proper types
   const columns: AccessorKeyColumnDef<RecordRow, ColumnValue>[] =
     useMemo(() => {
-      if (!tableData) return [];
+      if (!tableData?.pages[0])
+        return [] as AccessorKeyColumnDef<RecordRow, ColumnValue>[];
       const rowNumberColumn: AccessorKeyColumnDef<RecordRow, ColumnValue> = {
         accessorKey: "rowNumber",
         id: "rowNumber",
@@ -501,7 +545,7 @@ export default function BasePage() {
         ),
         size: 80,
         enableResizing: false,
-        cell: ({ row }) => (
+        cell: ({ row }: { row: Row<RecordRow> }) => (
           <RowNumberCell
             index={row.index}
             onDeleteRow={() => handleDeleteRow(row.original.id ?? "")}
@@ -509,39 +553,44 @@ export default function BasePage() {
         ),
       };
 
-      const dataColumns = tableData.columns.map((col) => ({
-        accessorKey: col.name,
-        header: () => (
-          <ColumnHeader
-            name={col.name}
-            onDelete={() => handleDeleteColumn(col.name)}
-            type={col.type as "text" | "number"}
-          />
-        ),
-        cell: (props: CellContext<RecordRow, ColumnValue>) => (
-          <CellRenderer
-            {...props}
-            keyName={col.name}
-            fieldType={col.type as "text" | "number"}
-            selectedCell={selectedCell}
-            setSelectedCell={setSelectedCell}
-            setData={setData}
-            tableId={tableId}
-            setIsSaving={setIsSaving}
-            updateCellMutation={updateCellMutation}
-            searchQuery={searchQuery}
-          />
-        ),
-        meta: { type: col.type } as ColumnMeta,
-      }));
-      return [rowNumberColumn, ...dataColumns];
+      const currentData = tableData.pages[0];
+      const dataColumns = (currentData.columns ?? []).map(
+        (col: TableColumn) => ({
+          accessorKey: col.name,
+          header: () => (
+            <ColumnHeader
+              name={col.name}
+              onDelete={() => handleDeleteColumn(col.name)}
+              type={col.type as "text" | "number"}
+            />
+          ),
+          cell: (props: CellContext<RecordRow, ColumnValue>) => (
+            <CellRenderer
+              {...props}
+              keyName={col.name}
+              fieldType={col.type as "text" | "number"}
+              selectedCell={selectedCell}
+              setSelectedCell={setSelectedCell}
+              setData={setData}
+              tableId={tableId}
+              setIsSaving={setIsSaving}
+              updateCellMutation={updateCellMutation}
+              searchQuery={searchQuery}
+            />
+          ),
+        })
+      );
+      return [rowNumberColumn, ...(dataColumns ?? [])];
     }, [
       tableData,
-      tableId,
-      updateCellMutation,
-      selectedCell,
       handleDeleteColumn,
       handleDeleteRow,
+      selectedCell,
+      setSelectedCell,
+      setData,
+      tableId,
+      setIsSaving,
+      updateCellMutation,
       searchQuery,
     ]);
 
@@ -563,7 +612,8 @@ export default function BasePage() {
   const createColumnMutation = api.table.createColumn.useMutation({
     onSuccess: () => {
       if (tableId) {
-        void refetchTableData();
+        // Refetch the table data after creating a column
+        void fetchNextPage();
       }
       setIsAddingColumn(false);
     },
@@ -587,7 +637,10 @@ export default function BasePage() {
       setFieldError("No table found.");
       return;
     }
-    const exists = tableData?.columns.some((col) => col.name === newFieldName);
+    const currentData = tableData?.pages[0];
+    const exists = currentData?.columns?.some(
+      (col: TableColumn) => col.name === newFieldName
+    );
     if (exists) {
       setFieldError("A column with that name already exists.");
       return;
@@ -652,7 +705,7 @@ export default function BasePage() {
     for (let i = 0; i < batches; i++) {
       const batchCount = Math.min(batchSize, count - i * batchSize);
       const fakeRecords = Array.from({ length: batchCount }, () =>
-        generateFakeRecord(columns),
+        generateFakeRecord(columns)
       );
 
       try {
@@ -693,6 +746,18 @@ export default function BasePage() {
     getScrollElement: () => parentRef.current,
     estimateSize: () => 35,
     overscan: 10,
+    onChange: (virtualizer) => {
+      const lastItem = virtualizer.getVirtualItems().slice(-1)[0];
+      if (
+        lastItem &&
+        lastItem.index >= data.length - 1 &&
+        hasNextPage &&
+        !isFetchingNextPage
+      ) {
+        setIsLoadingMore(true);
+        void fetchNextPage();
+      }
+    },
   });
 
   return (
@@ -714,7 +779,7 @@ export default function BasePage() {
               />
             </div>
             <h1 className="flex items-center gap-1 text-lg font-bold text-gray-100 hover:text-white">
-              {isBaseLoading ? "Loading..." : (base?.name ?? "Untitled Base 2")}
+              {isBaseLoading ? "Loading..." : base?.name ?? "Untitled Base 2"}
               <ChevronDown size={16} className="text-gray-100" />
             </h1>
           </div>
@@ -913,7 +978,7 @@ export default function BasePage() {
         className="flex-1 overflow-auto bg-white"
         onClick={() => setSelectedCell(null)}
       >
-        {isLoading || isBaseLoading || isTablesLoading || isTableDataLoading ? (
+        {isInitialLoading || isBaseLoading || isTablesLoading ? (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="mr-2 h-6 w-6 animate-spin text-gray-400" />
             <span className="text-gray-600">Loading table data...</span>
@@ -940,7 +1005,7 @@ export default function BasePage() {
                     >
                       {flexRender(
                         header.column.columnDef.header,
-                        header.getContext(),
+                        header.getContext()
                       )}
                     </div>
                   ))}
@@ -1038,7 +1103,7 @@ export default function BasePage() {
                       >
                         {flexRender(
                           cell.column.columnDef.cell,
-                          cell.getContext(),
+                          cell.getContext()
                         )}
                       </div>
                     ))}
@@ -1051,6 +1116,16 @@ export default function BasePage() {
                 );
               })}
             </div>
+
+            {/* Loading indicator for pagination */}
+            {isLoadingMore && (
+              <div className="sticky bottom-0 flex w-full items-center justify-center bg-white/80 py-2 shadow-md">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin text-gray-400" />
+                <span className="text-sm text-gray-500">
+                  Loading more rows...
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>

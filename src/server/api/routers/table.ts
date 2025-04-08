@@ -27,9 +27,9 @@ export const tableRouter = createTRPCRouter({
           z.object({
             name: z.string(),
             type: z.enum(["text", "number"]),
-          }),
+          })
         ),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       // First create the table
@@ -59,10 +59,12 @@ export const tableRouter = createTRPCRouter({
       z.object({
         tableId: z.string(),
         searchQuery: z.string().optional(),
-      }),
+        limit: z.number().optional(),
+        cursor: z.string().optional(), // Add cursor for pagination
+      })
     )
     .query(async ({ ctx, input }) => {
-      const { tableId, searchQuery } = input;
+      const { tableId, searchQuery, limit = 50, cursor } = input;
 
       const columns = await ctx.db.column.findMany({
         where: { tableId },
@@ -97,13 +99,23 @@ export const tableRouter = createTRPCRouter({
         where: {
           tableId,
           ...(orFilter ? { OR: orFilter } : {}),
+          ...(cursor && !isNaN(parseInt(cursor, 10))
+            ? { order: { gt: parseInt(cursor, 10) } }
+            : {}),
         },
         orderBy: { order: "asc" },
+        take: limit + 1, // Take one extra to determine if there are more rows
       });
+
+      const hasNextPage = rows.length > limit;
+      const lastRow = hasNextPage ? rows[limit - 1] : null;
+      const nextCursor = lastRow?.order?.toString();
+      const currentPageRows = hasNextPage ? rows.slice(0, -1) : rows;
 
       return {
         columns,
-        rows,
+        rows: currentPageRows,
+        nextCursor,
       };
     }),
 
@@ -114,7 +126,7 @@ export const tableRouter = createTRPCRouter({
         rowId: z.string(),
         columnName: z.string(),
         value: z.union([z.string(), z.number(), z.null()]),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const row = await ctx.db.row.findUnique({
@@ -148,7 +160,7 @@ export const tableRouter = createTRPCRouter({
         tableId: z.string(),
         defaultData: z.record(z.union([z.string(), z.number(), z.null()])),
         _clientId: z.string().optional(),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const newRow = await ctx.db.$transaction(async (prisma) => {
@@ -178,7 +190,7 @@ export const tableRouter = createTRPCRouter({
         tableId: z.string(),
         name: z.string(),
         type: z.enum(["text", "number"]),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       // First check if column already exists
@@ -247,7 +259,7 @@ export const tableRouter = createTRPCRouter({
       z.object({
         tableId: z.string(),
         columnName: z.string(),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const column = await ctx.db.column.findFirst({
@@ -296,9 +308,9 @@ export const tableRouter = createTRPCRouter({
       z.object({
         tableId: z.string(),
         rows: z.array(
-          z.record(z.string(), z.union([z.string(), z.number(), z.null()])),
+          z.record(z.string(), z.union([z.string(), z.number(), z.null()]))
         ),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       // 1. Get the current max order
@@ -331,7 +343,7 @@ export const tableRouter = createTRPCRouter({
       z.object({
         tableId: z.string(),
         rowId: z.string(),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const { tableId, rowId } = input;
@@ -365,7 +377,7 @@ export const tableRouter = createTRPCRouter({
       z.object({
         tableId: z.string(),
         rowIds: z.array(z.string()),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const { tableId, rowIds } = input;
@@ -405,8 +417,8 @@ export const tableRouter = createTRPCRouter({
                 // Use a very negative order to avoid conflicts with existing rows
                 order: -1000000 - index,
               },
-            }),
-          ),
+            })
+          )
         );
 
         // 2. Then set them to their final order values
@@ -420,8 +432,8 @@ export const tableRouter = createTRPCRouter({
               data: {
                 order: index,
               },
-            }),
-          ),
+            })
+          )
         );
 
         return { success: true };

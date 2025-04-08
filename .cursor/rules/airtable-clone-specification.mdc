@@ -1,0 +1,21 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Project: Airtable Clone
+- Use create.t3.gg, deploy on Vercel
+- Use TanStack Table & TanStack Virtual
+- Use PostgreSQL as DB, TRPC for backend
+- Main page = table with rows, columns, and cells (like Airtable but not 1:1)
+- Google login via Clerk
+- Users can create bases, each base has tables
+- Dynamically add Text and Number columns
+- Smooth inline cell editing and tabbing
+- Tables show default data using FakerJS
+- Add 100k rows via button, support infinite scroll (no lag)
+- Search, filter, and sort done at DB level
+- Views can save column filters (>, <, contains, empty), sort order, and hidden columns
+- Add loading states
+- Should scale to 1M rows
+
