@@ -699,38 +699,43 @@ export default function BasePage() {
   const handleAddFakeRecords = async (count: number) => {
     if (!tableId) return;
     setIsSaving(true);
-    const batchSize = 100; // Number of rows per batch
+    
+    // Reduce batch size to stay within Vercel's limits (around 1MB per request)
+    const batchSize = 20; // Smaller batch size to avoid payload size limits
     const batches = Math.ceil(count / batchSize);
 
-    for (let i = 0; i < batches; i++) {
-      const batchCount = Math.min(batchSize, count - i * batchSize);
-      const fakeRecords = Array.from({ length: batchCount }, () =>
-        generateFakeRecord(columns)
-      );
+    try {
+      for (let i = 0; i < batches; i++) {
+        const batchCount = Math.min(batchSize, count - i * batchSize);
+        const fakeRecords = Array.from({ length: batchCount }, () =>
+          generateFakeRecord(columns)
+        );
 
-      try {
-        const res = await createRowsMutation.mutateAsync({
-          tableId,
-          rows: fakeRecords,
-        });
+        try {
+          const res = await createRowsMutation.mutateAsync({
+            tableId,
+            rows: fakeRecords,
+          });
 
-        const newFormattedRows = res.map((row) => ({
-          id: row.id,
-          ...(row.data as Record<string, string | number | null>),
-        }));
+          const newFormattedRows = res.map((row) => ({
+            id: row.id,
+            ...(row.data as Record<string, string | number | null>),
+          }));
 
-        // Append new rows to data and show them on screen
-        setData((prev) => [...prev, ...newFormattedRows]);
+          // Append new rows to data and show them on screen
+          setData((prev) => [...prev, ...newFormattedRows]);
 
-        // Optional: Give time for UI to catch up (good for slower devices)
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (err) {
-        console.error("Failed to create batch:", err);
-        break;
+          // Give time for UI to catch up and avoid rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        } catch (err) {
+          console.error("Failed to create batch:", err);
+          // Continue with next batch instead of breaking
+          continue;
+        }
       }
+    } finally {
+      setIsSaving(false);
     }
-
-    setIsSaving(false);
   };
 
   const table = useReactTable({
@@ -1144,7 +1149,7 @@ export default function BasePage() {
           className="text-blue-600 hover:underline"
           disabled={isSaving}
         >
-          Add 100000 rows
+          {isSaving ? "Adding rows..." : "Add 100000 rows"}
         </button>
       </div>
     </div>
