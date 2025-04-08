@@ -39,6 +39,7 @@ import {
 import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 
 // -------------------------------------------------------------------------
 // Types and Helpers
@@ -57,11 +58,14 @@ const generateFakeRecord = (
 ): RecordRow => {
   const record: RecordRow = {};
   for (const col of columns) {
-    const key = col.accessorKey || "";
-    if (key) {
+    const key = col.accessorKey ?? "";
+    if (key && key !== "rowNumber") { // Skip the rowNumber column
+      // Get the column type from the meta property
       const meta = col.meta as ColumnMeta | undefined;
+      const columnType = meta?.type ?? "text"; // Default to text if not specified
+      
       record[key] =
-        meta?.type === "number"
+        columnType === "number"
           ? faker.number.int({ min: 0, max: 100 })
           : faker.word.words(2);
     }
@@ -140,6 +144,7 @@ function CellRenderer({
   setIsSaving,
   updateCellMutation,
   searchQuery,
+  editedCellsRef,
 }: {
   row: { index: number; original: RecordRow };
   column: { id: string };
@@ -154,6 +159,7 @@ function CellRenderer({
   setIsSaving: React.Dispatch<React.SetStateAction<boolean>>;
   updateCellMutation: { mutate: (input: UpdateCellInput) => void };
   searchQuery?: string;
+  editedCellsRef: React.MutableRefObject<Map<string, { value: string | number | null }>>;
 }) {
   const value = row.original[keyName];
   const isSelected =
@@ -184,6 +190,11 @@ function CellRenderer({
           : Number(localValue)
         : localValue;
     if (newValue !== value) {
+      // Store the edited value in our ref
+      if (row.original.id) {
+        editedCellsRef.current.set(`${row.original.id}|${keyName}`, { value: newValue });
+      }
+      
       setData((prev) =>
         prev.map((item) =>
           item.id === row.original.id ? { ...item, [keyName]: newValue } : item
@@ -353,6 +364,19 @@ export default function BasePage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
+  // Add state for tracking bulk row addition progress
+  const [isAddingBulkRows, setIsAddingBulkRows] = useState(false);
+  const [bulkRowProgress, setBulkRowProgress] = useState({ current: 0, total: 0 });
+  
+  // Add a ref to track edited cells
+  const editedCellsRef = useRef<Map<string, { value: string | number | null }>>(new Map());
+  
+  // Add a ref to track if the bulk row addition should be cancelled
+  const shouldCancelBulkRowsRef = useRef(false);
+
+  // Add a state to track when to force a refresh
+  const [forceRefresh, setForceRefresh] = useState(0);
 
   // Focus search input when modal opens
   useEffect(() => {
@@ -418,6 +442,7 @@ export default function BasePage() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
+    refetch,
   } = api.table.getTableData.useInfiniteQuery(
     {
       tableId: tableId ?? "",
@@ -437,17 +462,32 @@ export default function BasePage() {
   // Add a ref to track deleted row IDs
   const deletedRowIdsRef = useRef<Set<string>>(new Set());
 
-  // Update the useEffect that processes tableData to respect deleted rows
+  // Update the useEffect that processes tableData to respect edited cells
   useEffect(() => {
     if (tableData) {
       // Combine all rows from all pages
       const allRows = tableData.pages.flatMap((page) => page.rows);
       const formattedData = allRows
         .filter(row => !deletedRowIdsRef.current.has(row.id))
-        .map((row) => ({
-          id: row.id,
-          ...(row.data as Record<string, string | number | null>),
-        }));
+        .map((row) => {
+          const rowData: RecordRow = {
+            id: row.id,
+            ...(row.data as Record<string, string | number | null>),
+          };
+          
+          // Apply any pending edits to this row
+          const rowId = row.id;
+          if (rowId) {
+            for (const [key, value] of editedCellsRef.current.entries()) {
+              const [editedRowId, columnName] = key.split('|');
+              if (editedRowId === rowId && columnName && typeof columnName === 'string') {
+                rowData[columnName] = value.value;
+              }
+            }
+          }
+          
+          return rowData;
+        });
 
       // Update the data state
       setData(formattedData);
@@ -557,6 +597,7 @@ export default function BasePage() {
       const dataColumns = (currentData.columns ?? []).map(
         (col: TableColumn) => ({
           accessorKey: col.name,
+          meta: { type: col.type as "text" | "number" }, // Explicitly set the meta property
           header: () => (
             <ColumnHeader
               name={col.name}
@@ -576,6 +617,7 @@ export default function BasePage() {
               setIsSaving={setIsSaving}
               updateCellMutation={updateCellMutation}
               searchQuery={searchQuery}
+              editedCellsRef={editedCellsRef}
             />
           ),
         })
@@ -592,6 +634,7 @@ export default function BasePage() {
       setIsSaving,
       updateCellMutation,
       searchQuery,
+      editedCellsRef,
     ]);
 
   // -----------------------------------------------------------------------
@@ -610,10 +653,21 @@ export default function BasePage() {
   });
 
   const createColumnMutation = api.table.createColumn.useMutation({
-    onSuccess: () => {
+    onSuccess: (newColumn) => {
       if (tableId) {
-        // Refetch the table data after creating a column
-        void fetchNextPage();
+        // Force a complete refresh of the table data
+        void refetch();
+        
+        // Update the local data to include the new column with default values
+        setData((prevData) => 
+          prevData.map(row => ({
+            ...row,
+            [newColumn.name]: newColumn.type === "number" ? null : ""
+          }))
+        );
+        
+        // Increment the force refresh counter to trigger a re-render
+        setForceRefresh(prev => prev + 1);
       }
       setIsAddingColumn(false);
     },
@@ -664,15 +718,22 @@ export default function BasePage() {
     if (isSaving) return;
     setIsSaving(true);
     const defaultData: Record<string, string | number | null> = {};
-    columns.forEach((col) => {
+    
+    // Get all columns except the rowNumber column
+    const dataColumns = columns.filter(col => col.accessorKey && col.accessorKey !== "rowNumber");
+    
+    dataColumns.forEach((col) => {
       if (!col.accessorKey) return;
       const key = col.accessorKey;
       const meta = col.meta as ColumnMeta | undefined;
+      const columnType = meta?.type || "text"; // Default to text if not specified
+      
       defaultData[key] =
-        meta?.type === "number"
+        columnType === "number"
           ? faker.number.int({ min: 0, max: 100 })
           : faker.word.words({ count: faker.number.int({ min: 1, max: 3 }) });
     });
+    
     try {
       const newRow = await createRowMutation.mutateAsync({
         tableId,
@@ -699,10 +760,20 @@ export default function BasePage() {
   const handleAddFakeRecords = async (count: number) => {
     if (!tableId) return;
     setIsSaving(true);
+    setIsAddingBulkRows(true);
+    setBulkRowProgress({ current: 0, total: count });
+    shouldCancelBulkRowsRef.current = false;
+    
     const batchSize = 30; // Number of rows per batch
     const batches = Math.ceil(count / batchSize);
 
     for (let i = 0; i < batches; i++) {
+      // Check if we should cancel the operation
+      if (shouldCancelBulkRowsRef.current) {
+        console.log("Cancelling bulk row addition");
+        break;
+      }
+      
       const batchCount = Math.min(batchSize, count - i * batchSize);
       const fakeRecords = Array.from({ length: batchCount }, () =>
         generateFakeRecord(columns)
@@ -721,6 +792,12 @@ export default function BasePage() {
 
         // Append new rows to data and show them on screen
         setData((prev) => [...prev, ...newFormattedRows]);
+        
+        // Update progress
+        setBulkRowProgress(prev => ({
+          current: prev.current + batchCount,
+          total: count
+        }));
 
         // Optional: Give time for UI to catch up (good for slower devices)
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -731,6 +808,13 @@ export default function BasePage() {
     }
 
     setIsSaving(false);
+    setIsAddingBulkRows(false);
+    shouldCancelBulkRowsRef.current = false;
+  };
+
+  // Add a function to cancel the bulk row addition
+  const cancelBulkRowAddition = () => {
+    shouldCancelBulkRowsRef.current = true;
   };
 
   const table = useReactTable({
@@ -760,6 +844,39 @@ export default function BasePage() {
     },
   });
 
+  // Add a function to save all pending changes before navigating away
+  const saveAllPendingChanges = async () => {
+    if (editedCellsRef.current.size === 0) return true;
+    
+    setIsSaving(true);
+    
+    try {
+      // Create an array of promises for all pending edits
+      const savePromises = Array.from(editedCellsRef.current.entries()).map(
+        async ([key, value]) => {
+          const [rowId, columnName] = key.split('|');
+          if (!rowId || !columnName || !tableId) return;
+          
+          return updateCellMutation.mutateAsync({
+            tableId,
+            rowId,
+            columnName,
+            value: value.value,
+          });
+        }
+      );
+      
+      // Wait for all edits to be saved
+      await Promise.all(savePromises);
+      return true;
+    } catch (error) {
+      console.error("Failed to save pending changes:", error);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="flex h-screen flex-col">
       {/* Top Navigation */}
@@ -770,13 +887,26 @@ export default function BasePage() {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded">
-              <Image
-                src="/airtable-svgrepo-com.svg"
-                alt="Airtable Logo"
-                width={20}
-                height={20}
-                className="object-contain"
-              />
+              <Link 
+                href="/" 
+                onClick={async (e) => {
+                  e.preventDefault();
+                  const saved = await saveAllPendingChanges();
+                  if (saved) {
+                    window.location.href = "/";
+                  } else {
+                    alert("Failed to save some changes. Please try again.");
+                  }
+                }}
+              >
+                <Image
+                  src="/airtable-svgrepo-com.svg"
+                  alt="Airtable Logo"
+                  width={20}
+                  height={20}
+                  className="object-contain"
+                />
+              </Link>
             </div>
             <h1 className="flex items-center gap-1 text-lg font-bold text-gray-100 hover:text-white">
               {isBaseLoading ? "Loading..." : base?.name ?? "Untitled Base 2"}
@@ -1142,10 +1272,32 @@ export default function BasePage() {
         <button
           onClick={() => handleAddFakeRecords(100000)}
           className="text-blue-600 hover:underline"
-          disabled={isSaving}
+          disabled={isSaving || isAddingBulkRows}
         >
-          Add 100000 rows
+          {isAddingBulkRows 
+            ? `Adding rows... ${Math.round((bulkRowProgress.current / bulkRowProgress.total) * 100)}%` 
+            : "Add 100000 rows"}
         </button>
+        {isAddingBulkRows && (
+          <div className="ml-2 flex items-center">
+            <div className="h-2 w-32 rounded-full bg-gray-200">
+              <div 
+                className="h-2 rounded-full bg-blue-600" 
+                style={{ width: `${Math.round((bulkRowProgress.current / bulkRowProgress.total) * 100)}%` }}
+              ></div>
+            </div>
+            <span className="ml-2 text-xs text-gray-500">
+              {bulkRowProgress.current.toLocaleString()} / {bulkRowProgress.total.toLocaleString()}
+            </span>
+            <button
+              onClick={cancelBulkRowAddition}
+              className="ml-2 rounded-full bg-red-100 p-1 text-red-600 hover:bg-red-200"
+              title="Cancel adding rows"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
