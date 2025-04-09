@@ -40,6 +40,7 @@ import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { FilterPopover } from "./FilterPopover";
 
 // -------------------------------------------------------------------------
 // Types and Helpers
@@ -59,11 +60,12 @@ const generateFakeRecord = (
   const record: RecordRow = {};
   for (const col of columns) {
     const key = col.accessorKey ?? "";
-    if (key && key !== "rowNumber") { // Skip the rowNumber column
+    if (key && key !== "rowNumber") {
+      // Skip the rowNumber column
       // Get the column type from the meta property
       const meta = col.meta as ColumnMeta | undefined;
       const columnType = meta?.type ?? "text"; // Default to text if not specified
-      
+
       record[key] =
         columnType === "number"
           ? faker.number.int({ min: 0, max: 100 })
@@ -159,7 +161,9 @@ function CellRenderer({
   setIsSaving: React.Dispatch<React.SetStateAction<boolean>>;
   updateCellMutation: { mutate: (input: UpdateCellInput) => void };
   searchQuery?: string;
-  editedCellsRef: React.MutableRefObject<Map<string, { value: string | number | null }>>;
+  editedCellsRef: React.MutableRefObject<
+    Map<string, { value: string | number | null }>
+  >;
 }) {
   const value = row.original[keyName];
   const isSelected =
@@ -192,9 +196,11 @@ function CellRenderer({
     if (newValue !== value) {
       // Store the edited value in our ref
       if (row.original.id) {
-        editedCellsRef.current.set(`${row.original.id}|${keyName}`, { value: newValue });
+        editedCellsRef.current.set(`${row.original.id}|${keyName}`, {
+          value: newValue,
+        });
       }
-      
+
       setData((prev) =>
         prev.map((item) =>
           item.id === row.original.id ? { ...item, [keyName]: newValue } : item
@@ -357,6 +363,8 @@ export default function BasePage() {
   const [tableId, setTableId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingColumn, setIsAddingColumn] = useState(false);
+  const [isAddTableMenuOpen, setIsAddTableMenuOpen] = useState(false);
+  const addTableButtonRef = useRef<HTMLDivElement>(null);
   const parentRef = useRef<HTMLDivElement>(null);
   const initialTableCreationAttempted = useRef(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
@@ -364,14 +372,19 @@ export default function BasePage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  
+
   // Add state for tracking bulk row addition progress
   const [isAddingBulkRows, setIsAddingBulkRows] = useState(false);
-  const [bulkRowProgress, setBulkRowProgress] = useState({ current: 0, total: 0 });
-  
+  const [bulkRowProgress, setBulkRowProgress] = useState({
+    current: 0,
+    total: 0,
+  });
+
   // Add a ref to track edited cells
-  const editedCellsRef = useRef<Map<string, { value: string | number | null }>>(new Map());
-  
+  const editedCellsRef = useRef<Map<string, { value: string | number | null }>>(
+    new Map()
+  );
+
   // Add a ref to track if the bulk row addition should be cancelled
   const shouldCancelBulkRowsRef = useRef(false);
 
@@ -388,52 +401,23 @@ export default function BasePage() {
   const { data: base, isLoading: isBaseLoading } = api.base.getById.useQuery({
     baseId: baseId as string,
   });
-  const { data: tables, isLoading: isTablesLoading } =
-    api.table.getTablesForBase.useQuery(
-      { baseId: baseId as string },
-      { enabled: !!baseId }
-    );
 
-  const createTableMutation = api.table.createTable.useMutation({
-    onSuccess: (newTable) => {
-      setTableId(newTable.id);
-    },
-  });
+  const {
+    data: tables,
+    isLoading: isTablesLoading,
+    refetch: refetchTables,
+  } = api.table.getTablesForBase.useQuery(
+    { baseId: baseId as string },
+    { enabled: !!baseId }
+  );
 
-  const updateCellMutation = api.table.updateCell.useMutation({
-    onSuccess: () => {
-      setIsSaving(false);
-    },
-    onError: (error) => {
-      console.error("Failed to update cell:", error);
-      setIsSaving(false);
-    },
-  });
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<{
+    columnName: string;
+    operator: "isEmpty" | "isNotEmpty" | "contains" | "notContains" | "equals" | "greaterThan" | "lessThan";
+    value?: string | number | null;
+  } | undefined>(undefined);
 
-  useEffect(() => {
-    if (initialTableCreationAttempted.current) return;
-    if (isTablesLoading || !tables) return;
-    if (tables.length > 0 && tables[0]?.id) {
-      setTableId(tables[0].id);
-      initialTableCreationAttempted.current = true;
-    } else if (tables.length === 0 && baseId) {
-      initialTableCreationAttempted.current = true;
-      createTableMutation.mutate(
-        {
-          baseId: baseId as string,
-          name: "Table 1",
-          columns: defaultColumnsKeys.map((name) => ({ name, type: "text" })),
-        },
-        {
-          onSuccess: (newTable) => {
-            setTableId(newTable.id);
-          },
-        }
-      );
-    }
-  }, [tables, isTablesLoading, baseId, createTableMutation]);
-
-  // Use standard query instead of useInfiniteQuery
   const {
     data: tableData,
     hasNextPage,
@@ -445,12 +429,116 @@ export default function BasePage() {
       tableId: tableId ?? "",
       limit: 50,
       searchQuery,
+      filter: activeFilter,
     },
     {
       getNextPageParam: (lastPage) => lastPage.nextCursor,
       enabled: !!tableId,
     }
   );
+
+  const [isCreatingTable, setIsCreatingTable] = useState(false);
+  const [tableError, setTableError] = useState<string | null>(null);
+
+  const createTableMutation = api.table.createTable.useMutation({
+    onSuccess: async (newTable) => {
+      setTableId(newTable.id);
+      setIsCreatingTable(false);
+      setTableError(null);
+      // Refetch both the tables list and table data
+      await refetchTables();
+      void refetch();
+    },
+    onError: (error) => {
+      setTableError(error.message);
+      setIsCreatingTable(false);
+    },
+  });
+
+  // Create initial table if needed
+  useEffect(() => {
+    if (
+      !baseId ||
+      !tables ||
+      isTablesLoading ||
+      initialTableCreationAttempted.current
+    )
+      return;
+
+    if (tables.length === 0) {
+      initialTableCreationAttempted.current = true;
+      void createTableMutation.mutateAsync({
+        baseId: baseId as string,
+        name: "Table 1",
+        columns: defaultColumnsKeys.map((name) => ({ name, type: "text" })),
+      });
+    }
+  }, [baseId, tables, isTablesLoading, createTableMutation]);
+
+  // Set initial table selection
+  useEffect(() => {
+    if (tables && tables.length > 0 && !tableId && tables[0]?.id) {
+      setTableId(tables[0].id);
+    }
+  }, [tables, tableId]);
+
+  // Add new effect to handle table switching and data refresh
+  useEffect(() => {
+    if (tableId) {
+      // Reset the data state when switching tables
+      setData([]);
+      setIsInitialLoading(true);
+      // Refetch the table data
+      void refetch();
+    }
+  }, [tableId, refetch]);
+
+  const handleCreateNewTable = async () => {
+    if (!baseId || !tables) return;
+
+    setIsCreatingTable(true);
+    setTableError(null);
+
+    const nextTableNumber = tables.length + 1;
+
+    try {
+      await createTableMutation.mutateAsync({
+        baseId: baseId as string,
+        name: `Table ${nextTableNumber}`,
+        columns: defaultColumnsKeys.map((name) => ({ name, type: "text" })),
+      });
+      setIsAddTableMenuOpen(false);
+    } catch (error) {
+      console.error("Failed to create table:", error);
+    }
+  };
+
+  // Add click outside handler for table menu
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        addTableButtonRef.current &&
+        !addTableButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsAddTableMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const updateCellMutation = api.table.updateCell.useMutation({
+    onSuccess: () => {
+      setIsSaving(false);
+    },
+    onError: (error) => {
+      console.error("Failed to update cell:", error);
+      setIsSaving(false);
+    },
+  });
 
   // Track if we're in the middle of loading more data
   const isLoadingMoreRef = useRef(false);
@@ -465,24 +553,28 @@ export default function BasePage() {
       // Combine all rows from all pages
       const allRows = tableData.pages.flatMap((page) => page.rows);
       const formattedData = allRows
-        .filter(row => !deletedRowIdsRef.current.has(row.id))
+        .filter((row) => !deletedRowIdsRef.current.has(row.id))
         .map((row) => {
           const rowData: RecordRow = {
             id: row.id,
             ...(row.data as Record<string, string | number | null>),
           };
-          
+
           // Apply any pending edits to this row
           const rowId = row.id;
           if (rowId) {
             for (const [key, value] of editedCellsRef.current.entries()) {
-              const [editedRowId, columnName] = key.split('|');
-              if (editedRowId === rowId && columnName && typeof columnName === 'string') {
+              const [editedRowId, columnName] = key.split("|");
+              if (
+                editedRowId === rowId &&
+                columnName &&
+                typeof columnName === "string"
+              ) {
                 rowData[columnName] = value.value;
               }
             }
           }
-          
+
           return rowData;
         });
 
@@ -535,10 +627,12 @@ export default function BasePage() {
     onSuccess: (_, variables) => {
       // Add the deleted row ID to our tracking set
       deletedRowIdsRef.current.add(variables.rowId);
-      
+
       // Immediately update the UI by removing the deleted row
-      setData((prevData) => prevData.filter((row) => row.id !== variables.rowId));
-      
+      setData((prevData) =>
+        prevData.filter((row) => row.id !== variables.rowId)
+      );
+
       // We don't need to refetch or invalidate the query
       // The deleted row will be filtered out in the useEffect above
     },
@@ -654,12 +748,12 @@ export default function BasePage() {
       if (tableId) {
         // Force a complete refresh of the table data
         void refetch();
-        
+
         // Update the local data to include the new column with default values
-        setData((prevData) => 
-          prevData.map(row => ({
+        setData((prevData) =>
+          prevData.map((row) => ({
             ...row,
-            [newColumn.name]: newColumn.type === "number" ? null : ""
+            [newColumn.name]: newColumn.type === "number" ? null : "",
           }))
         );
       }
@@ -712,22 +806,24 @@ export default function BasePage() {
     if (isSaving) return;
     setIsSaving(true);
     const defaultData: Record<string, string | number | null> = {};
-    
+
     // Get all columns except the rowNumber column
-    const dataColumns = columns.filter(col => col.accessorKey && col.accessorKey !== "rowNumber");
-    
+    const dataColumns = columns.filter(
+      (col) => col.accessorKey && col.accessorKey !== "rowNumber"
+    );
+
     dataColumns.forEach((col) => {
       if (!col.accessorKey) return;
       const key = col.accessorKey;
       const meta = col.meta as ColumnMeta | undefined;
       const columnType = meta?.type ?? "text"; // Default to text if not specified
-      
+
       defaultData[key] =
         columnType === "number"
           ? faker.number.int({ min: 0, max: 100 })
           : faker.word.words({ count: faker.number.int({ min: 1, max: 3 }) });
     });
-    
+
     try {
       const newRow = await createRowMutation.mutateAsync({
         tableId,
@@ -757,7 +853,7 @@ export default function BasePage() {
     setIsAddingBulkRows(true);
     setBulkRowProgress({ current: 0, total: count });
     shouldCancelBulkRowsRef.current = false;
-    
+
     const batchSize = 30; // Number of rows per batch
     const batches = Math.ceil(count / batchSize);
 
@@ -767,7 +863,7 @@ export default function BasePage() {
         console.log("Cancelling bulk row addition");
         break;
       }
-      
+
       const batchCount = Math.min(batchSize, count - i * batchSize);
       const fakeRecords = Array.from({ length: batchCount }, () =>
         generateFakeRecord(columns)
@@ -786,11 +882,11 @@ export default function BasePage() {
 
         // Append new rows to data and show them on screen
         setData((prev) => [...prev, ...newFormattedRows]);
-        
+
         // Update progress
-        setBulkRowProgress(prev => ({
+        setBulkRowProgress((prev) => ({
           current: prev.current + batchCount,
-          total: count
+          total: count,
         }));
 
         // Optional: Give time for UI to catch up (good for slower devices)
@@ -819,6 +915,7 @@ export default function BasePage() {
     columnResizeMode: "onChange",
   });
 
+  // This is useVirtualizer from TanStack Virtual which tracks how far I scrolled and if I need to load more data
   const rowVirtualizer = useVirtualizer({
     count: table.getRowModel().rows.length,
     getScrollElement: () => parentRef.current,
@@ -841,16 +938,16 @@ export default function BasePage() {
   // Add a function to save all pending changes before navigating away
   const saveAllPendingChanges = async () => {
     if (editedCellsRef.current.size === 0) return true;
-    
+
     setIsSaving(true);
-    
+
     try {
       // Create an array of promises for all pending edits
       const savePromises = Array.from(editedCellsRef.current.entries()).map(
         async ([key, value]) => {
-          const [rowId, columnName] = key.split('|');
+          const [rowId, columnName] = key.split("|");
           if (!rowId || !columnName || !tableId) return;
-          
+
           return updateCellMutation.mutateAsync({
             tableId,
             rowId,
@@ -859,7 +956,7 @@ export default function BasePage() {
           });
         }
       );
-      
+
       // Wait for all edits to be saved
       await Promise.all(savePromises);
       return true;
@@ -881,8 +978,8 @@ export default function BasePage() {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded">
-              <Link 
-                href="/" 
+              <Link
+                href="/"
                 onClick={async (e) => {
                   e.preventDefault();
                   const saved = await saveAllPendingChanges();
@@ -962,20 +1059,74 @@ export default function BasePage() {
       {/* Table Header */}
       <div className="flex h-8 items-center justify-between bg-[#4c505b] px-4 text-sm">
         <div className="flex h-full items-center gap-2">
-          <div className="h-full">
-            <div className="flex h-full items-center rounded-t-md bg-white px-4">
-              <span className="font-small mr-2 text-base text-sm">Table 1</span>
-              <ChevronDown size={16} className="text-gray-500" />
-            </div>
+          <div className="flex h-full items-center gap-1">
+            {tables?.map((table) => (
+              <div key={table.id} className="h-full">
+                <div
+                  className={`flex h-full items-center rounded-t-md px-4 cursor-pointer ${
+                    tableId === table.id
+                      ? "bg-white text-black"
+                      : "text-gray-300 hover:text-white hover:bg-gray-700"
+                  }`}
+                  onClick={() => setTableId(table.id)}
+                >
+                  <span className="font-small mr-2 text-base text-sm">
+                    {table.name}
+                  </span>
+                  <ChevronDown
+                    size={16}
+                    className={
+                      tableId === table.id ? "text-gray-500" : "text-gray-300"
+                    }
+                  />
+                </div>
+              </div>
+            ))}
           </div>
           <div className="flex h-full items-center px-2">
             <ChevronDown size={16} className="text-white" />
           </div>
-          <div className="flex h-full items-center">
+          <div
+            ref={addTableButtonRef}
+            className="relative flex h-full cursor-pointer items-center hover:bg-gray-700"
+            onClick={() => setIsAddTableMenuOpen(!isAddTableMenuOpen)}
+          >
             <Plus size={16} className="mr-1 text-white" />
-            <span className="text-sm font-light text-gray-200">
+            <span className="text-sm font-light text-gray-100">
               Add or import
             </span>
+            {isAddTableMenuOpen && (
+              <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-md border border-gray-200 bg-white shadow-lg">
+                <div className="p-2">
+                  <button
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                    onClick={handleCreateNewTable}
+                    disabled={isCreatingTable}
+                  >
+                    <div className="flex h-6 w-6 items-center justify-center rounded border border-gray-300">
+                      {isCreatingTable ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus size={14} />
+                      )}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-medium">
+                        {isCreatingTable
+                          ? "Creating table..."
+                          : "Add a blank table"}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        Start from scratch
+                      </span>
+                    </div>
+                  </button>
+                  {tableError && (
+                    <p className="mt-2 text-xs text-red-600">{tableError}</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-6">
@@ -1005,10 +1156,36 @@ export default function BasePage() {
             <Eye className="h-4 w-4" />
             <span>Hide fields</span>
           </button>
-          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
-            <Filter className="h-4 w-4" />
-            <span>Filter</span>
-          </button>
+          <div className="relative">
+            <button 
+              className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100"
+              onClick={() => setIsFilterModalOpen(!isFilterModalOpen)}
+            >
+              <Filter className={`h-4 w-4 ${activeFilter ? "text-blue-600" : ""}`} />
+              <span className={activeFilter ? "text-blue-600" : ""}>Filter</span>
+              {activeFilter && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveFilter(undefined);
+                  }}
+                  className="ml-2 cursor-pointer rounded-full bg-blue-100 p-1 hover:bg-blue-200"
+                >
+                  <X size={12} className="text-blue-600" />
+                </div>
+              )}
+            </button>
+            {isFilterModalOpen && tableData?.pages[0]?.columns && (
+              <FilterPopover
+                columns={tableData.pages[0].columns}
+                onApplyFilter={(filter) => {
+                  setActiveFilter(filter);
+                  setIsFilterModalOpen(false);
+                }}
+                onClose={() => setIsFilterModalOpen(false)}
+              />
+            )}
+          </div>
           <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
             <FolderKanban className="h-4 w-4" />
             <span>Group</span>
@@ -1268,20 +1445,27 @@ export default function BasePage() {
           className="text-blue-600 hover:underline"
           disabled={isSaving || isAddingBulkRows}
         >
-          {isAddingBulkRows 
-            ? `Adding rows... ${Math.round((bulkRowProgress.current / bulkRowProgress.total) * 100)}%` 
+          {isAddingBulkRows
+            ? `Adding rows... ${Math.round(
+                (bulkRowProgress.current / bulkRowProgress.total) * 100
+              )}%`
             : "Add 100000 rows"}
         </button>
         {isAddingBulkRows && (
           <div className="ml-2 flex items-center">
             <div className="h-2 w-32 rounded-full bg-gray-200">
-              <div 
-                className="h-2 rounded-full bg-blue-600" 
-                style={{ width: `${Math.round((bulkRowProgress.current / bulkRowProgress.total) * 100)}%` }}
+              <div
+                className="h-2 rounded-full bg-blue-600"
+                style={{
+                  width: `${Math.round(
+                    (bulkRowProgress.current / bulkRowProgress.total) * 100
+                  )}%`,
+                }}
               ></div>
             </div>
             <span className="ml-2 text-xs text-gray-500">
-              {bulkRowProgress.current.toLocaleString()} / {bulkRowProgress.total.toLocaleString()}
+              {bulkRowProgress.current.toLocaleString()} /{" "}
+              {bulkRowProgress.total.toLocaleString()}
             </span>
             <button
               onClick={cancelBulkRowAddition}

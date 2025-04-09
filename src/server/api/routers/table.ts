@@ -60,51 +60,92 @@ export const tableRouter = createTRPCRouter({
         tableId: z.string(),
         searchQuery: z.string().optional(),
         limit: z.number().optional(),
-        cursor: z.string().optional(), // Add cursor for pagination
+        cursor: z.string().optional(),
+        filter: z.object({
+          columnName: z.string(),
+          operator: z.enum([
+            "isEmpty",
+            "isNotEmpty",
+            "contains",
+            "notContains",
+            "equals",
+            "greaterThan",
+            "lessThan",
+          ]),
+          value: z.union([z.string(), z.number(), z.null()]).optional(),
+        }).optional(),
       })
     )
     .query(async ({ ctx, input }) => {
-      const { tableId, searchQuery, limit = 50, cursor } = input;
+      const { tableId, searchQuery, limit = 50, cursor, filter } = input;
 
       const columns = await ctx.db.column.findMany({
         where: { tableId },
         orderBy: { order: "asc" },
       });
 
-      const orFilter =
-        searchQuery && searchQuery.trim().length > 0
-          ? columns.flatMap((col) => {
-              const filters: Prisma.JsonFilter[] = [
-                {
-                  path: [col.name],
-                  string_contains: searchQuery,
+      // Build the search filter
+      const searchFilter = searchQuery && searchQuery.trim().length > 0
+        ? columns.flatMap((col) => {
+            const filters: Prisma.JsonFilter[] = [
+              {
+                path: [col.name],
+                string_contains: searchQuery,
+                mode: "insensitive",
+              },
+            ];
+
+            const maybeNumber = Number(searchQuery);
+            if (!isNaN(maybeNumber)) {
+              filters.push({
+                path: [col.name],
+                equals: maybeNumber,
+              });
+            }
+
+            return filters.map((f) => ({ data: f }));
+          })
+        : undefined;
+
+      // Build the column filter
+      const columnFilter = filter
+        ? {
+            data: {
+              path: [filter.columnName],
+              ...(filter.operator === "isEmpty" && { equals: null }),
+              ...(filter.operator === "isNotEmpty" && { not: null }),
+              ...(filter.operator === "contains" && {
+                string_contains: filter.value as string,
+                mode: "insensitive",
+              }),
+              ...(filter.operator === "notContains" && {
+                not: {
+                  string_contains: filter.value as string,
                   mode: "insensitive",
                 },
-              ];
-
-              // Add numeric comparison if searchQuery is a valid number
-              const maybeNumber = Number(searchQuery);
-              if (!isNaN(maybeNumber)) {
-                filters.push({
-                  path: [col.name],
-                  equals: maybeNumber,
-                });
-              }
-
-              return filters.map((f) => ({ data: f }));
-            })
-          : undefined;
+              }),
+              ...(filter.operator === "equals" && { equals: filter.value }),
+              ...(filter.operator === "greaterThan" && {
+                gt: filter.value as number,
+              }),
+              ...(filter.operator === "lessThan" && {
+                lt: filter.value as number,
+              }),
+            } as Prisma.JsonFilter,
+          }
+        : undefined;
 
       const rows = await ctx.db.row.findMany({
         where: {
           tableId,
-          ...(orFilter ? { OR: orFilter } : {}),
+          ...(searchFilter ? { OR: searchFilter } : {}),
+          ...(columnFilter ? { AND: [columnFilter] } : {}),
           ...(cursor && !isNaN(parseInt(cursor, 10))
             ? { order: { gt: parseInt(cursor, 10) } }
             : {}),
         },
         orderBy: { order: "asc" },
-        take: limit + 1, // Take one extra to determine if there are more rows
+        take: limit + 1,
       });
 
       const hasNextPage = rows.length > limit;
