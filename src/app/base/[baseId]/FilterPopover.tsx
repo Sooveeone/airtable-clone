@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { Column } from "@/app/_types/base";
+import { X } from "lucide-react";
 
 type FilterOperator = "isEmpty" | "isNotEmpty" | "contains" | "notContains" | "equals" | "greaterThan" | "lessThan";
 
@@ -11,12 +12,18 @@ interface FilterPopoverProps {
     value?: string | number | null;
   }) => void;
   onClose: () => void;
+  activeFilter?: {
+    columnName: string;
+    operator: FilterOperator;
+    value?: string | number | null;
+  };
+  onClearFilter: () => void;
 }
 
-export function FilterPopover({ columns, onApplyFilter, onClose }: FilterPopoverProps) {
-  const [selectedColumn, setSelectedColumn] = useState<string>("");
-  const [selectedOperator, setSelectedOperator] = useState<FilterOperator | "">("");
-  const [filterValue, setFilterValue] = useState<string>("");
+export function FilterPopover({ columns, onApplyFilter, onClose, activeFilter, onClearFilter }: FilterPopoverProps) {
+  const [selectedColumn, setSelectedColumn] = useState<string>(activeFilter?.columnName ?? "");
+  const [selectedOperator, setSelectedOperator] = useState<FilterOperator | "">(activeFilter?.operator ?? "");
+  const [filterValue, setFilterValue] = useState<string>(activeFilter?.value?.toString() ?? "");
 
   // Get the type of the selected column
   const selectedColumnType = columns.find(col => col.name === selectedColumn)?.type ?? "text";
@@ -62,9 +69,20 @@ export function FilterPopover({ columns, onApplyFilter, onClose }: FilterPopover
   return (
     <div className="absolute left-0 top-full z-50 mt-1 w-96 rounded-lg border border-gray-200 bg-white p-4 shadow-lg">
       <div className="mb-4">
-        <h3 className="mb-2 text-sm font-medium text-gray-700">
-          In this view, show records where
-        </h3>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-medium text-gray-700">
+            In this view, show records where
+          </h3>
+          {activeFilter && (
+            <button
+              onClick={onClearFilter}
+              className="flex items-center gap-1 rounded-md bg-green-100 px-2 py-1 text-sm text-green-800 hover:bg-green-200"
+            >
+              Clear filter
+              <X size={14} />
+            </button>
+          )}
+        </div>
         <div className="space-y-3">
           {/* Column Select */}
           <select

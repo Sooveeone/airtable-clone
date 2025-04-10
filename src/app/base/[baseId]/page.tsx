@@ -147,6 +147,7 @@ function CellRenderer({
   updateCellMutation,
   searchQuery,
   editedCellsRef,
+  activeFilter,
 }: {
   row: { index: number; original: RecordRow };
   column: { id: string };
@@ -164,6 +165,11 @@ function CellRenderer({
   editedCellsRef: React.MutableRefObject<
     Map<string, { value: string | number | null }>
   >;
+  activeFilter?: {
+    columnName: string;
+    operator: string;
+    value?: string | number | null;
+  };
 }) {
   const value = row.original[keyName];
   const isSelected =
@@ -174,6 +180,33 @@ function CellRenderer({
   );
   const [isEditing, setIsEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Check if this cell matches the filter criteria
+  const matchesFilter = activeFilter && keyName === activeFilter.columnName && (() => {
+    if (!activeFilter) return false;
+    const cellValue = value;
+    
+    switch (activeFilter.operator) {
+      case "isEmpty":
+        return cellValue === null || cellValue === "";
+      case "isNotEmpty":
+        return cellValue !== null && cellValue !== "";
+      case "contains":
+        return typeof cellValue === "string" && 
+               cellValue.toLowerCase().includes((activeFilter.value as string).toLowerCase());
+      case "notContains":
+        return typeof cellValue === "string" && 
+               !cellValue.toLowerCase().includes((activeFilter.value as string).toLowerCase());
+      case "equals":
+        return cellValue === activeFilter.value;
+      case "greaterThan":
+        return typeof cellValue === "number" && cellValue > (activeFilter.value as number);
+      case "lessThan":
+        return typeof cellValue === "number" && cellValue < (activeFilter.value as number);
+      default:
+        return false;
+    }
+  })();
 
   useEffect(() => {
     setLocalValue(value === 0 && fieldType === "number" ? 0 : value ?? "");
@@ -255,7 +288,7 @@ function CellRenderer({
         ref={inputRef}
         type={fieldType === "number" ? "number" : "text"}
         className={`h-full w-full border-none px-2 outline-none ${
-          matchesQuery ? "bg-yellow-100" : "bg-transparent"
+          matchesQuery ? "bg-yellow-100" : matchesFilter ? "bg-green-100" : "bg-transparent"
         }`}
         value={
           isEditing
@@ -688,7 +721,7 @@ export default function BasePage() {
       const dataColumns = (currentData.columns ?? []).map(
         (col: TableColumn) => ({
           accessorKey: col.name,
-          meta: { type: col.type as "text" | "number" }, // Explicitly set the meta property
+          meta: { type: col.type as "text" | "number" },
           header: () => (
             <ColumnHeader
               name={col.name}
@@ -709,6 +742,7 @@ export default function BasePage() {
               updateCellMutation={updateCellMutation}
               searchQuery={searchQuery}
               editedCellsRef={editedCellsRef}
+              activeFilter={activeFilter}
             />
           ),
         })
@@ -726,6 +760,7 @@ export default function BasePage() {
       updateCellMutation,
       searchQuery,
       editedCellsRef,
+      activeFilter,
     ]);
 
   // -----------------------------------------------------------------------
@@ -1158,22 +1193,15 @@ export default function BasePage() {
           </button>
           <div className="relative">
             <button 
-              className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100"
+              className={`flex items-center gap-1.5 rounded px-2 py-1 ${
+                activeFilter ? 'bg-green-100 hover:bg-green-200' : 'hover:bg-gray-100'
+              }`}
               onClick={() => setIsFilterModalOpen(!isFilterModalOpen)}
             >
-              <Filter className={`h-4 w-4 ${activeFilter ? "text-blue-600" : ""}`} />
-              <span className={activeFilter ? "text-blue-600" : ""}>Filter</span>
-              {activeFilter && (
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveFilter(undefined);
-                  }}
-                  className="ml-2 cursor-pointer rounded-full bg-blue-100 p-1 hover:bg-blue-200"
-                >
-                  <X size={12} className="text-blue-600" />
-                </div>
-              )}
+              <Filter className="h-4 w-4" />
+              <span>
+                {activeFilter ? `Filtered by ${activeFilter.columnName}` : "Filter"}
+              </span>
             </button>
             {isFilterModalOpen && tableData?.pages[0]?.columns && (
               <FilterPopover
@@ -1183,6 +1211,11 @@ export default function BasePage() {
                   setIsFilterModalOpen(false);
                 }}
                 onClose={() => setIsFilterModalOpen(false)}
+                activeFilter={activeFilter}
+                onClearFilter={() => {
+                  setActiveFilter(undefined);
+                  setIsFilterModalOpen(false);
+                }}
               />
             )}
           </div>
