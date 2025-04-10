@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { type Prisma, Prisma as PrismaNamespace } from "@prisma/client";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { TRPCError } from "@trpc/server";
@@ -54,105 +54,228 @@ export const tableRouter = createTRPCRouter({
       return table;
     }),
 
-  getTableData: protectedProcedure
+    getTableData: protectedProcedure
     .input(
       z.object({
         tableId: z.string(),
         searchQuery: z.string().optional(),
         limit: z.number().optional(),
-        cursor: z.string().optional(),
-        filter: z.object({
-          columnName: z.string(),
-          operator: z.enum([
-            "isEmpty",
-            "isNotEmpty",
-            "contains",
-            "notContains",
-            "equals",
-            "greaterThan",
-            "lessThan",
-          ]),
-          value: z.union([z.string(), z.number(), z.null()]).optional(),
-        }).optional(),
+        cursor: z.string().optional(), // This will now be a JSON string containing sort value and row ID
+        filter: z
+          .object({
+            columnName: z.string(),
+            operator: z.enum([
+              "isEmpty",
+              "isNotEmpty",
+              "contains",
+              "notContains",
+              "equals",
+              "greaterThan",
+              "lessThan",
+            ]),
+            value: z.union([z.string(), z.number(), z.null()]).optional(),
+          })
+          .optional(),
+        sort: z
+          .object({
+            columnName: z.string(),
+            direction: z.enum(["asc", "desc"]),
+          })
+          .optional(),
       })
     )
     .query(async ({ ctx, input }) => {
-      const { tableId, searchQuery, limit = 50, cursor, filter } = input;
-
+      const { tableId, searchQuery, limit = 50, cursor, filter, sort } = input;
+  
       const columns = await ctx.db.column.findMany({
         where: { tableId },
         orderBy: { order: "asc" },
       });
-
-      // Build the search filter
-      const searchFilter = searchQuery && searchQuery.trim().length > 0
-        ? columns.flatMap((col) => {
-            const filters: Prisma.JsonFilter[] = [
-              {
-                path: [col.name],
-                string_contains: searchQuery,
-                mode: "insensitive",
-              },
-            ];
-
-            const maybeNumber = Number(searchQuery);
-            if (!isNaN(maybeNumber)) {
-              filters.push({
-                path: [col.name],
-                equals: maybeNumber,
-              });
-            }
-
-            return filters.map((f) => ({ data: f }));
-          })
-        : undefined;
-
-      // Build the column filter
-      const columnFilter = filter
-        ? {
-            data: {
-              path: [filter.columnName],
-              ...(filter.operator === "isEmpty" && { equals: null }),
-              ...(filter.operator === "isNotEmpty" && { not: null }),
-              ...(filter.operator === "contains" && {
-                string_contains: filter.value as string,
-                mode: "insensitive",
-              }),
-              ...(filter.operator === "notContains" && {
-                not: {
-                  string_contains: filter.value as string,
-                  mode: "insensitive",
-                },
-              }),
-              ...(filter.operator === "equals" && { equals: filter.value }),
-              ...(filter.operator === "greaterThan" && {
-                gt: filter.value as number,
-              }),
-              ...(filter.operator === "lessThan" && {
-                lt: filter.value as number,
-              }),
-            } as Prisma.JsonFilter,
-          }
-        : undefined;
-
-      const rows = await ctx.db.row.findMany({
-        where: {
-          tableId,
-          ...(searchFilter ? { OR: searchFilter } : {}),
-          ...(columnFilter ? { AND: [columnFilter] } : {}),
-          ...(cursor && !isNaN(parseInt(cursor, 10))
-            ? { order: { gt: parseInt(cursor, 10) } }
-            : {}),
-        },
-        orderBy: { order: "asc" },
-        take: limit + 1,
-      });
-
+  
+      type Row = {
+        id: string;
+        tableId: string;
+        order: number;
+        data: Record<string, unknown>;
+      };
+  
+      // Parse the cursor if provided
+      let cursorData = null;
+      if (cursor) {
+        try {
+          cursorData = JSON.parse(cursor);
+        } catch (e) {
+          // Invalid cursor format, will ignore
+          console.error("Invalid cursor format:", e);
+        }
+      }
+  
+      // Get rows with proper database-level sorting and keyset pagination
+      const rows = await ctx.db.$queryRaw<Row[]>`
+        SELECT * FROM "Row"
+        WHERE "tableId" = ${tableId}
+        ${
+          searchQuery
+            ? PrismaNamespace.sql`AND (${PrismaNamespace.join(
+                columns.map(
+                  (col) =>
+                    PrismaNamespace.sql`CAST(data->>${
+                      col.name
+                    } AS TEXT) ILIKE ${"%" + searchQuery + "%"}`
+                ),
+                " OR "
+              )})`
+            : PrismaNamespace.empty
+        }
+        ${
+          filter
+            ? PrismaNamespace.sql`AND ${
+                filter.operator === "isEmpty"
+                  ? PrismaNamespace.sql`data->>${filter.columnName} IS NULL`
+                  : filter.operator === "isNotEmpty"
+                  ? PrismaNamespace.sql`data->>${filter.columnName} IS NOT NULL`
+                  : filter.operator === "contains"
+                  ? PrismaNamespace.sql`CAST(data->>${
+                      filter.columnName
+                    } AS TEXT) ILIKE ${"%" + filter.value + "%"}`
+                  : filter.operator === "notContains"
+                  ? PrismaNamespace.sql`CAST(data->>${
+                      filter.columnName
+                    } AS TEXT) NOT ILIKE ${"%" + filter.value + "%"}`
+                  : filter.operator === "equals"
+                  ? PrismaNamespace.sql`data->>${filter.columnName} = ${String(
+                      filter.value
+                    )}`
+                  : filter.operator === "greaterThan"
+                  ? PrismaNamespace.sql`CAST(data->>${
+                      filter.columnName
+                    } AS NUMERIC) > ${Number(filter.value)}`
+                  : filter.operator === "lessThan"
+                  ? PrismaNamespace.sql`CAST(data->>${
+                      filter.columnName
+                    } AS NUMERIC) < ${Number(filter.value)}`
+                  : PrismaNamespace.empty
+              }`
+            : PrismaNamespace.empty
+        }
+        ${
+          !sort && cursorData
+            ? PrismaNamespace.sql`AND (
+                "order" > ${cursorData.order} OR 
+                ("order" = ${cursorData.order} AND "id" > ${cursorData.id})
+              )`
+            : PrismaNamespace.empty
+        }
+        ${
+          sort && cursorData
+            ? PrismaNamespace.sql`AND (
+                ${
+                  sort.direction === "asc"
+                    ? PrismaNamespace.sql`
+                        (
+                          (
+                            data->>${sort.columnName} ~ '^[0-9]+$' AND 
+                            CAST(data->>${sort.columnName} AS NUMERIC) > ${cursorData.value}
+                          ) OR
+                          (
+                            (data->>${sort.columnName} !~ '^[0-9]+$' OR data->>${sort.columnName} IS NULL) AND
+                            ${cursorData.isNumeric}
+                          ) OR
+                          (
+                            data->>${sort.columnName} !~ '^[0-9]+$' AND 
+                            data->>${sort.columnName} IS NOT NULL AND
+                            NOT ${cursorData.isNumeric} AND
+                            CAST(data->>${sort.columnName} AS TEXT) > ${cursorData.textValue}
+                          )
+                        ) OR (
+                          (
+                            (data->>${sort.columnName} ~ '^[0-9]+$' AND CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value}) OR
+                            (data->>${sort.columnName} !~ '^[0-9]+$' AND data->>${sort.columnName} IS NOT NULL AND CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue})
+                          ) AND
+                          ("order" > ${cursorData.order} OR ("order" = ${cursorData.order} AND "id" > ${cursorData.id}))
+                        )
+                      `
+                    : PrismaNamespace.sql`
+                        (
+                          (
+                            data->>${sort.columnName} ~ '^[0-9]+$' AND 
+                            CAST(data->>${sort.columnName} AS NUMERIC) < ${cursorData.value}
+                          ) OR
+                          (
+                            (data->>${sort.columnName} !~ '^[0-9]+$' OR data->>${sort.columnName} IS NULL) AND
+                            NOT ${cursorData.isNumeric}
+                          ) OR
+                          (
+                            data->>${sort.columnName} !~ '^[0-9]+$' AND 
+                            data->>${sort.columnName} IS NOT NULL AND
+                            ${cursorData.isNumeric} AND
+                            CAST(data->>${sort.columnName} AS TEXT) < ${cursorData.textValue}
+                          )
+                        ) OR (
+                          (
+                            (data->>${sort.columnName} ~ '^[0-9]+$' AND CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value}) OR
+                            (data->>${sort.columnName} !~ '^[0-9]+$' AND data->>${sort.columnName} IS NOT NULL AND CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue})
+                          ) AND
+                          ("order" < ${cursorData.order} OR ("order" = ${cursorData.order} AND "id" < ${cursorData.id}))
+                        )
+                      `
+                }
+              )`
+            : PrismaNamespace.empty
+        }
+        ORDER BY
+        ${
+          sort
+            ? PrismaNamespace.sql`
+                CASE 
+                  WHEN data->>${sort.columnName} ~ '^[0-9]+$' 
+                  THEN CAST(data->>${sort.columnName} AS NUMERIC)
+                  ELSE NULL 
+                END ${
+                  sort.direction === "asc"
+                    ? PrismaNamespace.sql`ASC`
+                    : PrismaNamespace.sql`DESC`
+                } NULLS LAST,
+                CAST(data->>${sort.columnName} AS TEXT) ${
+                sort.direction === "asc"
+                  ? PrismaNamespace.sql`ASC`
+                  : PrismaNamespace.sql`DESC`
+              } NULLS LAST,
+                "order" ASC,
+                "id" ASC
+              `
+            : PrismaNamespace.sql`"order" ASC, "id" ASC`
+        }
+        LIMIT ${limit + 1}
+      `;
+  
       const hasNextPage = rows.length > limit;
       const lastRow = hasNextPage ? rows[limit - 1] : null;
-      const nextCursor = lastRow?.order?.toString();
+      
+      // Create a new cursor that contains both the sort value and row ID
+      let nextCursor = null;
+      if (lastRow && sort) {
+        const sortValue = (lastRow.data as Record<string, unknown>)[sort.columnName];
+        const isNumeric = typeof sortValue === 'number' || 
+                          (typeof sortValue === 'string' && /^[0-9]+$/.test(sortValue));
+        
+        nextCursor = JSON.stringify({
+          value: isNumeric ? Number(sortValue) : null,
+          textValue: String(sortValue || ''),
+          isNumeric,
+          order: lastRow.order,
+          id: lastRow.id
+        });
+      } else if (lastRow) {
+        // If there's no sort, use row order
+        nextCursor = JSON.stringify({
+          order: lastRow.order,
+          id: lastRow.id
+        });
+      }
+  
       const currentPageRows = hasNextPage ? rows.slice(0, -1) : rows;
-
+  
       return {
         columns,
         rows: currentPageRows,
@@ -262,7 +385,7 @@ export const tableRouter = createTRPCRouter({
           name: input.name,
           type: input.type,
           tableId: input.tableId,
-          order: nextOrder, // ✅ set order here
+          order: nextOrder,
         },
       });
 

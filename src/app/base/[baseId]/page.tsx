@@ -41,6 +41,7 @@ import { UserButton } from "@clerk/nextjs";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { FilterPopover } from "./FilterPopover";
+import { SortPopover } from "./SortPopover";
 
 // -------------------------------------------------------------------------
 // Types and Helpers
@@ -445,11 +446,16 @@ export default function BasePage() {
   );
 
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<{
     columnName: string;
     operator: "isEmpty" | "isNotEmpty" | "contains" | "notContains" | "equals" | "greaterThan" | "lessThan";
     value?: string | number | null;
   } | undefined>(undefined);
+  const [activeSort, setActiveSort] = useState<{
+    columnName: string;
+    direction: "asc" | "desc";
+  }>();
 
   const {
     data: tableData,
@@ -463,6 +469,7 @@ export default function BasePage() {
       limit: 50,
       searchQuery,
       filter: activeFilter,
+      sort: activeSort,
     },
     {
       getNextPageParam: (lastPage) => lastPage.nextCursor,
@@ -1219,13 +1226,37 @@ export default function BasePage() {
               />
             )}
           </div>
+          <div className="relative">
+            <button 
+              className={`flex items-center gap-1.5 rounded px-2 py-1 ${
+                activeSort ? 'bg-blue-100 hover:bg-blue-200' : 'hover:bg-gray-100'
+              }`}
+              onClick={() => setIsSortModalOpen(!isSortModalOpen)}
+            >
+              <ArrowUpDown className="h-4 w-4" />
+              <span>
+                {activeSort ? `Sorted by ${activeSort.columnName}` : "Sort"}
+              </span>
+            </button>
+            {isSortModalOpen && tableData?.pages[0]?.columns && (
+              <SortPopover
+                columns={tableData.pages[0].columns}
+                onApplySort={(sort) => {
+                  setActiveSort(sort);
+                  setIsSortModalOpen(false);
+                }}
+                onClose={() => setIsSortModalOpen(false)}
+                activeSort={activeSort}
+                onClearSort={() => {
+                  setActiveSort(undefined);
+                  setIsSortModalOpen(false);
+                }}
+              />
+            )}
+          </div>
           <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
             <FolderKanban className="h-4 w-4" />
             <span>Group</span>
-          </button>
-          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
-            <ArrowUpDown className="h-4 w-4" />
-            <span>Sort</span>
           </button>
           <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
             <Palette className="h-4 w-4" />
