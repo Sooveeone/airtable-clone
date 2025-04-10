@@ -1194,7 +1194,7 @@ export default function BasePage() {
       </div>
 
       {/* Column Toolbar */}
-      <div className="flex items-center border-b bg-white px-4 py-2 text-sm shadow-sm">
+      <div className="flex items-center border-b border-gray-300 bg-white px-4 py-2 text-sm shadow-sm">
         <div className="flex items-center gap-1">
           <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
             <Menu className="h-4 w-4" />
@@ -1364,35 +1364,40 @@ export default function BasePage() {
         ) : (
           <div
             ref={parentRef}
-            className="h-full w-full overflow-auto"
+            className="h-full overflow-auto"
             onClick={() => setSelectedCell(null)}
           >
-            {/* Table Header Row */}
-            <div className="font-small sticky top-0 z-10 flex bg-[#f4f4f4] text-sm text-gray-800">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <div key={headerGroup.id} className="flex w-full">
-                  {headerGroup.headers.map((header) => (
-                    <div
-                      key={header.id}
-                      style={{
-                        width: `${header.getSize()}px`,
-                        minWidth: `${header.getSize()}px`,
-                        height: "30px", // Moderate height for header cells
-                      }}
-                      className="border-r border-b border-gray-200 px-3 py-1 text-left"
-                    >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
+            {/* Table Container with max-width */}
+            <div className="inline-block min-w-[800px]">
+              {/* Table Header Row */}
+              <div className="sticky top-0 z-10 flex w-max bg-[#f4f4f4] text-sm text-gray-800">
+                <div className="flex">
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <div key={headerGroup.id} className="flex">
+                      {headerGroup.headers.map((header) => (
+                        <div
+                          key={header.id}
+                          style={{
+                            width: `${header.getSize()}px`,
+                            minWidth: `${header.getSize()}px`,
+                            height: "30px",
+                          }}
+                          className="border-r border-b border-gray-200 px-3 py-1 text-left"
+                        >
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                        </div>
+                      ))}
                     </div>
                   ))}
-                  {/* Extra header for "+ Add field" */}
+                  {/* Add field column with fixed width */}
                   <div
-                    className="border-b border-gray-200 px-3 py-1 text-left"
+                    className="border-b border-r border-gray-200 px-3 py-1 text-left"
                     style={{
-                      width: "150px",
-                      minWidth: "150px",
+                      width: "90px",
+                      minWidth: "90px",
                       height: "30px",
                     }}
                   >
@@ -1403,10 +1408,10 @@ export default function BasePage() {
                           setFieldError("");
                         }
                       }}
-                      className="cursor-pointer px-2 py-0.5 text-sm hover:underline"
+                      className="flex h-full w-full items-center justify-center text-lg font-medium text-gray-600 hover:text-gray-900"
                       disabled={isAddingColumn}
                     >
-                      {isAddingColumn ? "Adding..." : "+ Add field"}
+                      {isAddingColumn ? "..." : "+"}
                     </button>
                     {isFieldModalOpen && (
                       <div className="absolute z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
@@ -1443,56 +1448,49 @@ export default function BasePage() {
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
 
-            {/* Virtualized Table Body */}
-            <div
-              style={{
-                height: `${rowVirtualizer.getTotalSize()}px`,
-                width: "100%",
-                position: "relative",
-              }}
-            >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const row = table.getRowModel().rows[virtualRow.index];
-                if (!row) return null;
-                return (
-                  <div
-                    key={row.id ?? virtualRow.index}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      transform: `translateY(${virtualRow.start}px)`,
-                      width: "100%",
-                      height: "35px",
-                    }}
-                    className="flex border-b border-gray-200"
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <div
-                        key={cell.id}
-                        style={{
-                          width: `${cell.column.getSize()}px`,
-                          minWidth: `${cell.column.getSize()}px`,
-                          height: "100%", // Match row height
-                        }}
-                        className="border-r border-gray-100"
-                      >
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </div>
-                    ))}
-                    {/* Empty cell for the "+ Add field" column */}
+              {/* Virtualized Table Body */}
+              <div
+                style={{
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  position: "relative",
+                }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const row = table.getRowModel().rows[virtualRow.index];
+                  if (!row) return null;
+                  return (
                     <div
-                      style={{ width: "150px", minWidth: "150px" }}
-                      className="px-4 py-2"
-                    />
-                  </div>
-                );
-              })}
+                      key={row.id ?? virtualRow.index}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        transform: `translateY(${virtualRow.start}px)`,
+                        height: "35px",
+                      }}
+                      className="flex border-b border-gray-200"
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <div
+                          key={cell.id}
+                          style={{
+                            width: `${cell.column.getSize()}px`,
+                            minWidth: `${cell.column.getSize()}px`,
+                            height: "100%",
+                          }}
+                          className="border-r border-gray-200"
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Loading indicator for pagination */}
