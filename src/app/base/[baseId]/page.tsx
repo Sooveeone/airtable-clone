@@ -149,6 +149,7 @@ function CellRenderer({
   searchQuery,
   editedCellsRef,
   activeFilter,
+  activeSort,
 }: {
   row: { index: number; original: RecordRow };
   column: { id: string };
@@ -170,6 +171,10 @@ function CellRenderer({
     columnName: string;
     operator: string;
     value?: string | number | null;
+  };
+  activeSort?: {
+    columnName: string;
+    direction: "asc" | "desc";
   };
 }) {
   const value = row.original[keyName];
@@ -289,7 +294,13 @@ function CellRenderer({
         ref={inputRef}
         type={fieldType === "number" ? "number" : "text"}
         className={`h-full w-full border-none px-2 outline-none ${
-          matchesQuery ? "bg-yellow-100" : matchesFilter ? "bg-green-100" : "bg-transparent"
+          matchesQuery 
+            ? "bg-yellow-100" 
+            : matchesFilter 
+            ? "bg-green-100" 
+            : activeSort?.columnName === keyName
+            ? "bg-[#fff2ea]"
+            : "bg-transparent"
         }`}
         value={
           isEditing
@@ -750,6 +761,7 @@ export default function BasePage() {
               searchQuery={searchQuery}
               editedCellsRef={editedCellsRef}
               activeFilter={activeFilter}
+              activeSort={activeSort}
             />
           ),
         })
@@ -768,6 +780,7 @@ export default function BasePage() {
       searchQuery,
       editedCellsRef,
       activeFilter,
+      activeSort,
     ]);
 
   // -----------------------------------------------------------------------
@@ -1229,7 +1242,7 @@ export default function BasePage() {
           <div className="relative">
             <button 
               className={`flex items-center gap-1.5 rounded px-2 py-1 ${
-                activeSort ? 'bg-blue-100 hover:bg-blue-200' : 'hover:bg-gray-100'
+                activeSort ? 'bg-[#fff2ea] hover:bg-orange-100' : 'hover:bg-gray-100'
               }`}
               onClick={() => setIsSortModalOpen(!isSortModalOpen)}
             >

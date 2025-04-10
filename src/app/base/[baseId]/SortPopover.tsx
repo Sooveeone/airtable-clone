@@ -42,7 +42,7 @@ export function SortPopover({ columns, onApplySort, onClose, activeSort, onClear
           {activeSort && (
             <button
               onClick={onClearSort}
-              className="flex items-center gap-1 rounded-md bg-blue-100 px-2 py-1 text-sm text-blue-800 hover:bg-blue-200"
+              className="flex items-center gap-1 rounded-md bg-[#fff2ea] px-2 py-1 text-sm text-orange-800 hover:bg-orange-100"
             >
               Clear sort
               <X size={14} />
@@ -54,7 +54,7 @@ export function SortPopover({ columns, onApplySort, onClose, activeSort, onClear
           <select
             value={selectedColumn}
             onChange={(e) => setSelectedColumn(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
           >
             <option value="">Select a field</option>
             {columns.map((column) => (
@@ -69,7 +69,7 @@ export function SortPopover({ columns, onApplySort, onClose, activeSort, onClear
             <select
               value={selectedDirection}
               onChange={(e) => setSelectedDirection(e.target.value as "asc" | "desc")}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
             >
               <option value="asc">
                 {selectedColumnType === "number" ? "Smallest to largest" : "A → Z"}
@@ -94,8 +94,8 @@ export function SortPopover({ columns, onApplySort, onClose, activeSort, onClear
           onClick={handleApply}
           className={`cursor-pointer rounded-md px-4 py-2 text-sm text-white ${
             !selectedColumn
-              ? "bg-blue-300 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
+              ? "bg-orange-300 cursor-not-allowed"
+              : "bg-orange-500 hover:bg-orange-600"
           }`}
         >
           Apply
