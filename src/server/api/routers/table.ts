@@ -5,6 +5,14 @@ import { TRPCError } from "@trpc/server";
 
 // Removed unused JsonData type definition
 
+type CursorData = {
+  value?: number | null;
+  textValue?: string;
+  isNumeric?: boolean;
+  order: number;
+  id: string;
+};
+
 export const tableRouter = createTRPCRouter({
   getTablesForBase: protectedProcedure
     .input(z.object({ baseId: z.string() }))
@@ -100,10 +108,13 @@ export const tableRouter = createTRPCRouter({
       };
   
       // Parse the cursor if provided
-      let cursorData = null;
+      let cursorData: CursorData | null = null;
       if (cursor) {
         try {
-          cursorData = JSON.parse(cursor);
+          const parsed = JSON.parse(cursor) as CursorData;
+          if (typeof parsed.order === 'number' && typeof parsed.id === 'string') {
+            cursorData = parsed;
+          }
         } catch (e) {
           // Invalid cursor format, will ignore
           console.error("Invalid cursor format:", e);
@@ -175,22 +186,22 @@ export const tableRouter = createTRPCRouter({
                         (
                           (
                             data->>${sort.columnName} ~ '^[0-9]+$' AND 
-                            CAST(data->>${sort.columnName} AS NUMERIC) > ${cursorData.value}
+                            CAST(data->>${sort.columnName} AS NUMERIC) > ${cursorData.value ?? 0}
                           ) OR
                           (
                             (data->>${sort.columnName} !~ '^[0-9]+$' OR data->>${sort.columnName} IS NULL) AND
-                            ${cursorData.isNumeric}
+                            ${cursorData.isNumeric ?? false}
                           ) OR
                           (
                             data->>${sort.columnName} !~ '^[0-9]+$' AND 
                             data->>${sort.columnName} IS NOT NULL AND
-                            NOT ${cursorData.isNumeric} AND
-                            CAST(data->>${sort.columnName} AS TEXT) > ${cursorData.textValue}
+                            NOT ${cursorData.isNumeric ?? false} AND
+                            CAST(data->>${sort.columnName} AS TEXT) > ${cursorData.textValue ?? ''}
                           )
                         ) OR (
                           (
-                            (data->>${sort.columnName} ~ '^[0-9]+$' AND CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value}) OR
-                            (data->>${sort.columnName} !~ '^[0-9]+$' AND data->>${sort.columnName} IS NOT NULL AND CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue})
+                            (data->>${sort.columnName} ~ '^[0-9]+$' AND CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value ?? 0}) OR
+                            (data->>${sort.columnName} !~ '^[0-9]+$' AND data->>${sort.columnName} IS NOT NULL AND CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue ?? ''})
                           ) AND
                           ("order" > ${cursorData.order} OR ("order" = ${cursorData.order} AND "id" > ${cursorData.id}))
                         )
@@ -199,22 +210,22 @@ export const tableRouter = createTRPCRouter({
                         (
                           (
                             data->>${sort.columnName} ~ '^[0-9]+$' AND 
-                            CAST(data->>${sort.columnName} AS NUMERIC) < ${cursorData.value}
+                            CAST(data->>${sort.columnName} AS NUMERIC) < ${cursorData.value ?? 0}
                           ) OR
                           (
                             (data->>${sort.columnName} !~ '^[0-9]+$' OR data->>${sort.columnName} IS NULL) AND
-                            NOT ${cursorData.isNumeric}
+                            NOT ${cursorData.isNumeric ?? false}
                           ) OR
                           (
                             data->>${sort.columnName} !~ '^[0-9]+$' AND 
                             data->>${sort.columnName} IS NOT NULL AND
-                            ${cursorData.isNumeric} AND
-                            CAST(data->>${sort.columnName} AS TEXT) < ${cursorData.textValue}
+                            ${cursorData.isNumeric ?? false} AND
+                            CAST(data->>${sort.columnName} AS TEXT) < ${cursorData.textValue ?? ''}
                           )
                         ) OR (
                           (
-                            (data->>${sort.columnName} ~ '^[0-9]+$' AND CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value}) OR
-                            (data->>${sort.columnName} !~ '^[0-9]+$' AND data->>${sort.columnName} IS NOT NULL AND CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue})
+                            (data->>${sort.columnName} ~ '^[0-9]+$' AND CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value ?? 0}) OR
+                            (data->>${sort.columnName} !~ '^[0-9]+$' AND data->>${sort.columnName} IS NOT NULL AND CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue ?? ''})
                           ) AND
                           ("order" < ${cursorData.order} OR ("order" = ${cursorData.order} AND "id" < ${cursorData.id}))
                         )
@@ -255,13 +266,14 @@ export const tableRouter = createTRPCRouter({
       // Create a new cursor that contains both the sort value and row ID
       let nextCursor = null;
       if (lastRow && sort) {
-        const sortValue = (lastRow.data as Record<string, unknown>)[sort.columnName];
+        const sortValue = lastRow.data[sort.columnName];
         const isNumeric = typeof sortValue === 'number' || 
                           (typeof sortValue === 'string' && /^[0-9]+$/.test(sortValue));
         
         nextCursor = JSON.stringify({
           value: isNumeric ? Number(sortValue) : null,
-          textValue: String(sortValue || ''),
+          textValue: typeof sortValue === 'string' ? sortValue : 
+                    typeof sortValue === 'number' ? String(sortValue) : '',
           isNumeric,
           order: lastRow.order,
           id: lastRow.id
