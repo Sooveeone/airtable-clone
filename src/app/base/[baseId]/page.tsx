@@ -42,6 +42,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { FilterPopover } from "./FilterPopover";
 import { SortPopover } from "./SortPopover";
+import { HideFieldsPopover } from "./HideFieldsPopover";
 
 // -------------------------------------------------------------------------
 // Types and Helpers
@@ -433,6 +434,10 @@ export default function BasePage() {
   // Add a ref to track if the bulk row addition should be cancelled
   const shouldCancelBulkRowsRef = useRef(false);
 
+  // Add this after other state declarations
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
+  const [isHideFieldsOpen, setIsHideFieldsOpen] = useState(false);
+
   // Focus search input when modal opens
   useEffect(() => {
     if (isSearchModalOpen && searchInputRef.current) {
@@ -736,8 +741,9 @@ export default function BasePage() {
       };
 
       const currentData = tableData.pages[0];
-      const dataColumns = (currentData.columns ?? []).map(
-        (col: TableColumn) => ({
+      const dataColumns = (currentData.columns ?? [])
+        .filter((col: TableColumn) => !hiddenColumns.has(col.name)) // Filter out hidden columns
+        .map((col: TableColumn) => ({
           accessorKey: col.name,
           meta: { type: col.type as "text" | "number" },
           header: () => (
@@ -764,8 +770,7 @@ export default function BasePage() {
               activeSort={activeSort}
             />
           ),
-        })
-      );
+        }));
       return [rowNumberColumn, ...(dataColumns ?? [])];
     }, [
       tableData,
@@ -781,6 +786,7 @@ export default function BasePage() {
       editedCellsRef,
       activeFilter,
       activeSort,
+      hiddenColumns, // Add hiddenColumns to dependencies
     ]);
 
   // -----------------------------------------------------------------------
@@ -1023,6 +1029,19 @@ export default function BasePage() {
     }
   };
 
+  // Add this handler function
+  const handleToggleColumn = (columnName: string) => {
+    setHiddenColumns((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(columnName)) {
+        newSet.delete(columnName);
+      } else {
+        newSet.add(columnName);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="flex h-screen flex-col">
       {/* Top Navigation */}
@@ -1207,10 +1226,30 @@ export default function BasePage() {
             <SquareStack className="ml-1 h-3.5 w-3.5" />
             <ChevronDown className="h-3 w-3" />
           </button>
-          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
-            <Eye className="h-4 w-4" />
-            <span>Hide fields</span>
-          </button>
+          <div className="relative">
+            <button
+              className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100"
+              onClick={() => setIsHideFieldsOpen(!isHideFieldsOpen)}
+            >
+              <Eye className="h-4 w-4" />
+              <span>
+                Hide fields
+                {hiddenColumns.size > 0 && (
+                  <span className="ml-1 text-xs text-gray-500">
+                    ({hiddenColumns.size})
+                  </span>
+                )}
+              </span>
+            </button>
+            {isHideFieldsOpen && tableData?.pages[0]?.columns && (
+              <HideFieldsPopover
+                columns={tableData.pages[0].columns}
+                hiddenColumns={hiddenColumns}
+                onToggleColumn={handleToggleColumn}
+                onClose={() => setIsHideFieldsOpen(false)}
+              />
+            )}
+          </div>
           <div className="relative">
             <button 
               className={`flex items-center gap-1.5 rounded px-2 py-1 ${
