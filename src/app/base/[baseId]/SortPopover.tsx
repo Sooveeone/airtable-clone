@@ -16,12 +16,23 @@ interface SortPopoverProps {
   onClearSort: () => void;
 }
 
-export function SortPopover({ columns, onApplySort, onClose, activeSort, onClearSort }: SortPopoverProps) {
-  const [selectedColumn, setSelectedColumn] = useState<string>(activeSort?.columnName ?? "");
-  const [selectedDirection, setSelectedDirection] = useState<"asc" | "desc">(activeSort?.direction ?? "asc");
+export function SortPopover({
+  columns,
+  onApplySort,
+  onClose,
+  activeSort,
+  onClearSort,
+}: SortPopoverProps) {
+  const [selectedColumn, setSelectedColumn] = useState<string>(
+    activeSort?.columnName ?? ""
+  );
+  const [selectedDirection, setSelectedDirection] = useState<"asc" | "desc">(
+    activeSort?.direction ?? "asc"
+  );
 
   // Get the type of the selected column
-  const selectedColumnType = columns.find(col => col.name === selectedColumn)?.type ?? "text";
+  const selectedColumnType =
+    columns.find((col) => col.name === selectedColumn)?.type ?? "text";
 
   const handleApply = () => {
     if (!selectedColumn) return;
@@ -36,9 +47,7 @@ export function SortPopover({ columns, onApplySort, onClose, activeSort, onClear
     <div className="absolute left-0 top-full z-50 mt-1 w-96 rounded-lg border border-gray-200 bg-white p-4 shadow-lg">
       <div className="mb-4">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-gray-700">
-            Sort records by
-          </h3>
+          <h3 className="text-sm font-medium text-gray-700">Sort records by</h3>
           {activeSort && (
             <button
               onClick={onClearSort}
@@ -68,14 +77,20 @@ export function SortPopover({ columns, onApplySort, onClose, activeSort, onClear
           {selectedColumn && (
             <select
               value={selectedDirection}
-              onChange={(e) => setSelectedDirection(e.target.value as "asc" | "desc")}
+              onChange={(e) =>
+                setSelectedDirection(e.target.value as "asc" | "desc")
+              }
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
             >
               <option value="asc">
-                {selectedColumnType === "number" ? "Smallest to largest" : "A → Z"}
+                {selectedColumnType === "number"
+                  ? "Smallest to largest"
+                  : "A → Z"}
               </option>
               <option value="desc">
-                {selectedColumnType === "number" ? "Largest to smallest" : "Z → A"}
+                {selectedColumnType === "number"
+                  ? "Largest to smallest"
+                  : "Z → A"}
               </option>
             </select>
           )}
@@ -103,4 +118,4 @@ export function SortPopover({ columns, onApplySort, onClose, activeSort, onClear
       </div>
     </div>
   );
-} 
+}

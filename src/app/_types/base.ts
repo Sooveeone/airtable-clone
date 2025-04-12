@@ -22,3 +22,18 @@ export interface Row {
   tableId: string;
   data: Record<string, unknown>;
 }
+
+export interface View {
+  id: string;
+  name: string;
+  type: string;
+  tableId: string;
+  sortColumn?: string;
+  sortDirection?: "asc" | "desc";
+  filterColumn?: string;
+  filterOperator?: string;
+  filterValue?: unknown;
+  hiddenColumns: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}

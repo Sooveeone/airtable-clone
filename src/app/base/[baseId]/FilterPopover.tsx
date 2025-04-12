@@ -2,7 +2,14 @@ import { useState, useEffect } from "react";
 import type { Column } from "@/app/_types/base";
 import { X } from "lucide-react";
 
-type FilterOperator = "isEmpty" | "isNotEmpty" | "contains" | "notContains" | "equals" | "greaterThan" | "lessThan";
+type FilterOperator =
+  | "isEmpty"
+  | "isNotEmpty"
+  | "contains"
+  | "notContains"
+  | "equals"
+  | "greaterThan"
+  | "lessThan";
 
 interface FilterPopoverProps {
   columns: Column[];
@@ -20,27 +27,41 @@ interface FilterPopoverProps {
   onClearFilter: () => void;
 }
 
-export function FilterPopover({ columns, onApplyFilter, onClose, activeFilter, onClearFilter }: FilterPopoverProps) {
-  const [selectedColumn, setSelectedColumn] = useState<string>(activeFilter?.columnName ?? "");
-  const [selectedOperator, setSelectedOperator] = useState<FilterOperator | "">(activeFilter?.operator ?? "");
-  const [filterValue, setFilterValue] = useState<string>(activeFilter?.value?.toString() ?? "");
+export function FilterPopover({
+  columns,
+  onApplyFilter,
+  onClose,
+  activeFilter,
+  onClearFilter,
+}: FilterPopoverProps) {
+  const [selectedColumn, setSelectedColumn] = useState<string>(
+    activeFilter?.columnName ?? ""
+  );
+  const [selectedOperator, setSelectedOperator] = useState<FilterOperator | "">(
+    activeFilter?.operator ?? ""
+  );
+  const [filterValue, setFilterValue] = useState<string>(
+    activeFilter?.value?.toString() ?? ""
+  );
 
   // Get the type of the selected column
-  const selectedColumnType = columns.find(col => col.name === selectedColumn)?.type ?? "text";
+  const selectedColumnType =
+    columns.find((col) => col.name === selectedColumn)?.type ?? "text";
 
   // Define operators based on column type
-  const operators: { value: FilterOperator; label: string }[] = selectedColumnType === "number" 
-    ? [
-        { value: "greaterThan", label: "greater than" },
-        { value: "lessThan", label: "less than" },
-      ]
-    : [
-        { value: "isEmpty", label: "is empty" },
-        { value: "isNotEmpty", label: "is not empty" },
-        { value: "contains", label: "contains" },
-        { value: "notContains", label: "does not contain" },
-        { value: "equals", label: "is equal to" },
-      ];
+  const operators: { value: FilterOperator; label: string }[] =
+    selectedColumnType === "number"
+      ? [
+          { value: "greaterThan", label: "greater than" },
+          { value: "lessThan", label: "less than" },
+        ]
+      : [
+          { value: "isEmpty", label: "is empty" },
+          { value: "isNotEmpty", label: "is not empty" },
+          { value: "contains", label: "contains" },
+          { value: "notContains", label: "does not contain" },
+          { value: "equals", label: "is equal to" },
+        ];
 
   // Reset operator when column changes
   useEffect(() => {
@@ -58,11 +79,11 @@ export function FilterPopover({ columns, onApplyFilter, onClose, activeFilter, o
     onApplyFilter({
       columnName: selectedColumn,
       operator: selectedOperator,
-      value: needsValue 
-        ? selectedColumnType === "number" 
+      value: needsValue
+        ? selectedColumnType === "number"
           ? Number(filterValue)
           : filterValue
-        : null
+        : null,
     });
   };
 
@@ -102,7 +123,9 @@ export function FilterPopover({ columns, onApplyFilter, onClose, activeFilter, o
           {selectedColumn && (
             <select
               value={selectedOperator}
-              onChange={(e) => setSelectedOperator(e.target.value as FilterOperator)}
+              onChange={(e) =>
+                setSelectedOperator(e.target.value as FilterOperator)
+              }
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
             >
               <option value="">Select an operator</option>
@@ -115,15 +138,16 @@ export function FilterPopover({ columns, onApplyFilter, onClose, activeFilter, o
           )}
 
           {/* Value Input */}
-          {selectedOperator && !["isEmpty", "isNotEmpty"].includes(selectedOperator) && (
-            <input
-              type={selectedColumnType === "number" ? "number" : "text"}
-              value={filterValue}
-              onChange={(e) => setFilterValue(e.target.value)}
-              placeholder="Enter a value"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            />
-          )}
+          {selectedOperator &&
+            !["isEmpty", "isNotEmpty"].includes(selectedOperator) && (
+              <input
+                type={selectedColumnType === "number" ? "number" : "text"}
+                value={filterValue}
+                onChange={(e) => setFilterValue(e.target.value)}
+                placeholder="Enter a value"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              />
+            )}
         </div>
       </div>
 
@@ -138,7 +162,10 @@ export function FilterPopover({ columns, onApplyFilter, onClose, activeFilter, o
         <div
           onClick={handleApply}
           className={`cursor-pointer rounded-md px-4 py-2 text-sm text-white ${
-            !selectedColumn || !selectedOperator || (!filterValue && !["isEmpty", "isNotEmpty"].includes(selectedOperator))
+            !selectedColumn ||
+            !selectedOperator ||
+            (!filterValue &&
+              !["isEmpty", "isNotEmpty"].includes(selectedOperator))
               ? "bg-blue-300 cursor-not-allowed"
               : "bg-blue-600 hover:bg-blue-700"
           }`}
@@ -148,4 +175,4 @@ export function FilterPopover({ columns, onApplyFilter, onClose, activeFilter, o
       </div>
     </div>
   );
-} 
+}

@@ -43,6 +43,8 @@ import Link from "next/link";
 import { FilterPopover } from "./FilterPopover";
 import { SortPopover } from "./SortPopover";
 import { HideFieldsPopover } from "./HideFieldsPopover";
+import { ViewsSidebar } from "./ViewsSidebar";
+import { type Prisma } from "@prisma/client";
 
 // -------------------------------------------------------------------------
 // Types and Helpers
@@ -189,31 +191,48 @@ function CellRenderer({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Check if this cell matches the filter criteria
-  const matchesFilter = activeFilter && keyName === activeFilter.columnName && (() => {
-    if (!activeFilter) return false;
-    const cellValue = value;
-    
-    switch (activeFilter.operator) {
-      case "isEmpty":
-        return cellValue === null || cellValue === "";
-      case "isNotEmpty":
-        return cellValue !== null && cellValue !== "";
-      case "contains":
-        return typeof cellValue === "string" && 
-               cellValue.toLowerCase().includes((activeFilter.value as string).toLowerCase());
-      case "notContains":
-        return typeof cellValue === "string" && 
-               !cellValue.toLowerCase().includes((activeFilter.value as string).toLowerCase());
-      case "equals":
-        return cellValue === activeFilter.value;
-      case "greaterThan":
-        return typeof cellValue === "number" && cellValue > (activeFilter.value as number);
-      case "lessThan":
-        return typeof cellValue === "number" && cellValue < (activeFilter.value as number);
-      default:
-        return false;
-    }
-  })();
+  const matchesFilter =
+    activeFilter &&
+    keyName === activeFilter.columnName &&
+    (() => {
+      if (!activeFilter) return false;
+      const cellValue = value;
+
+      switch (activeFilter.operator) {
+        case "isEmpty":
+          return cellValue === null || cellValue === "";
+        case "isNotEmpty":
+          return cellValue !== null && cellValue !== "";
+        case "contains":
+          return (
+            typeof cellValue === "string" &&
+            cellValue
+              .toLowerCase()
+              .includes((activeFilter.value as string).toLowerCase())
+          );
+        case "notContains":
+          return (
+            typeof cellValue === "string" &&
+            !cellValue
+              .toLowerCase()
+              .includes((activeFilter.value as string).toLowerCase())
+          );
+        case "equals":
+          return cellValue === activeFilter.value;
+        case "greaterThan":
+          return (
+            typeof cellValue === "number" &&
+            cellValue > (activeFilter.value as number)
+          );
+        case "lessThan":
+          return (
+            typeof cellValue === "number" &&
+            cellValue < (activeFilter.value as number)
+          );
+        default:
+          return false;
+      }
+    })();
 
   useEffect(() => {
     setLocalValue(value === 0 && fieldType === "number" ? 0 : value ?? "");
@@ -295,10 +314,10 @@ function CellRenderer({
         ref={inputRef}
         type={fieldType === "number" ? "number" : "text"}
         className={`h-full w-full border-none px-2 outline-none ${
-          matchesQuery 
-            ? "bg-yellow-100" 
-            : matchesFilter 
-            ? "bg-green-100" 
+          matchesQuery
+            ? "bg-yellow-100"
+            : matchesFilter
+            ? "bg-green-100"
             : activeSort?.columnName === keyName
             ? "bg-[#fff2ea]"
             : "bg-transparent"
@@ -407,17 +426,23 @@ export default function BasePage() {
     columnId: string;
   } | null>(null);
   const [tableId, setTableId] = useState<string | null>(null);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [isAddTableMenuOpen, setIsAddTableMenuOpen] = useState(false);
+  const [isViewsSidebarOpen, setIsViewsSidebarOpen] = useState(false);
+  const [isViewSettingsUpdating, setIsViewSettingsUpdating] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
   const addTableButtonRef = useRef<HTMLDivElement>(null);
   const parentRef = useRef<HTMLDivElement>(null);
   const initialTableCreationAttempted = useRef(false);
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Add state for tracking bulk row addition progress
   const [isAddingBulkRows, setIsAddingBulkRows] = useState(false);
@@ -435,8 +460,20 @@ export default function BasePage() {
   const shouldCancelBulkRowsRef = useRef(false);
 
   // Add this after other state declarations
-  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [isHideFieldsOpen, setIsHideFieldsOpen] = useState(false);
+
+  const previousSettingsRef = useRef<{
+    filter?: typeof activeFilter;
+    sort?: typeof activeSort;
+    hiddenColumns?: string[];
+  } | null>(null);
+
+  // Add a ref to track the current view's settings
+  const currentViewSettingsRef = useRef<{
+    filter: typeof activeFilter;
+    sort: typeof activeSort;
+    hiddenColumns: string[];
+  } | null>(null);
 
   // Focus search input when modal opens
   useEffect(() => {
@@ -461,17 +498,179 @@ export default function BasePage() {
     { enabled: !!baseId }
   );
 
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<{
+  // Update view-related queries and mutations with proper typing
+  const { data: views, refetch: refetchViews } =
+    api.view.getViewsForTable.useQuery(
+      { tableId: tableId ?? "" },
+      {
+        enabled: !!tableId,
+      }
+    );
+
+  const updateViewMutation = api.view.updateView.useMutation();
+
+  // Add type definitions for view settings
+  type FilterType = {
     columnName: string;
-    operator: "isEmpty" | "isNotEmpty" | "contains" | "notContains" | "equals" | "greaterThan" | "lessThan";
+    operator:
+      | "isEmpty"
+      | "isNotEmpty"
+      | "contains"
+      | "notContains"
+      | "equals"
+      | "greaterThan"
+      | "lessThan";
     value?: string | number | null;
-  } | undefined>(undefined);
-  const [activeSort, setActiveSort] = useState<{
+  };
+
+  type SortType = {
     columnName: string;
     direction: "asc" | "desc";
-  }>();
+  };
+
+  // Add state definitions with proper types
+  const [activeFilter, setActiveFilter] = useState<FilterType | undefined>(
+    undefined
+  );
+  const [activeSort, setActiveSort] = useState<SortType | undefined>();
+
+  // Add a ref to track the last update
+  const lastUpdateRef = useRef<string | null>(null);
+
+  const utils = api.useUtils();
+
+  // Create a stable callback for updating view settings
+  const updateViewSettings = useCallback(
+    (viewId: string, settings: {
+      filter?: FilterType;
+      sort?: SortType;
+      hiddenColumns: string[];
+    }) => {
+      // Create a hash of the settings to compare
+      const settingsHash = JSON.stringify({
+        viewId,
+        ...settings
+      });
+
+      // Skip if this is the same update
+      if (lastUpdateRef.current === settingsHash) {
+        return;
+      }
+
+      // Update the view
+      setIsViewSettingsUpdating(true);
+      updateViewMutation.mutate(
+        {
+          id: viewId,
+          ...settings
+        },
+        {
+          onSuccess: () => {
+            lastUpdateRef.current = settingsHash;
+            // Refetch the views to get updated data
+            void refetchViews();
+            setIsViewSettingsUpdating(false);
+          },
+          onError: () => {
+            lastUpdateRef.current = null;
+            setIsViewSettingsUpdating(false);
+          }
+        }
+      );
+    },
+    [updateViewMutation, refetchViews]
+  );
+
+  // Effect to handle initial view selection
+  useEffect(() => {
+    const firstView = views?.[0];
+    if (!activeViewId && firstView) {
+      setActiveViewId(firstView.id);
+      
+      // Apply the view's settings
+      if (firstView.filter) {
+        setActiveFilter(firstView.filter as FilterType);
+      }
+      if (firstView.sort && typeof firstView.sort === 'object') {
+        const sortData = firstView.sort as { columnName: string; direction: "asc" | "desc" };
+        if (sortData.columnName && sortData.direction) {
+          setActiveSort(sortData);
+        }
+      }
+      if (firstView.hiddenColumns) {
+        const columns = Array.isArray(firstView.hiddenColumns)
+          ? firstView.hiddenColumns.filter(
+              (col): col is string => typeof col === "string"
+            )
+          : [];
+        setHiddenColumns(new Set(columns));
+      }
+    }
+  }, [views, activeViewId]);
+
+  // Update the useEffect for view settings
+  useEffect(() => {
+    if (!activeViewId || isViewSettingsUpdating) return;
+
+    const currentView = views?.find((v) => v.id === activeViewId);
+    if (!currentView) return;
+
+    // Get current settings, using undefined for optional parameters
+    const currentSettings = {
+      filter: activeFilter,
+      sort: activeSort,
+      hiddenColumns: Array.from(hiddenColumns)
+    };
+
+    // Skip if nothing has changed from the view's current settings
+    const viewSettings = {
+      filter: currentView.filter ? (currentView.filter as FilterType) : undefined,
+      sort: currentView.sort ? (currentView.sort as SortType) : undefined,
+      hiddenColumns: Array.isArray(currentView.hiddenColumns)
+        ? currentView.hiddenColumns.filter(
+            (col): col is string => typeof col === "string"
+          )
+        : []
+    };
+
+    // Compare settings using JSON.stringify
+    if (JSON.stringify(currentSettings) === JSON.stringify(viewSettings)) {
+      return;
+    }
+
+    // Update the view settings
+    updateViewSettings(activeViewId, currentSettings);
+  }, [activeViewId, activeFilter, activeSort, hiddenColumns, isViewSettingsUpdating, views, updateViewSettings]);
+
+  // Update handleViewSelect
+  const handleViewSelect = (viewId: string) => {
+    const view = views?.find((v) => v.id === viewId);
+    if (!view) return;
+
+    // Reset the last update hash since we're switching views
+    lastUpdateRef.current = null;
+    setIsViewSettingsUpdating(true);
+
+    // Batch all state updates together
+    const newFilter = view.filter ? (view.filter as FilterType) : undefined;
+    const newSort = view.sort ? (view.sort as SortType) : undefined;
+    const newHiddenColumns = new Set(
+      Array.isArray(view.hiddenColumns)
+        ? view.hiddenColumns.filter((col): col is string => typeof col === "string")
+        : []
+    );
+
+    // Update all states at once
+    setActiveViewId(viewId);
+    setActiveFilter(newFilter);
+    setActiveSort(newSort);
+    setHiddenColumns(newHiddenColumns);
+
+    // Clear the updating flag after a short delay to allow state updates to complete
+    setTimeout(() => {
+      setIsViewSettingsUpdating(false);
+    }, 100);
+  };
 
   const {
     data: tableData,
@@ -541,7 +740,11 @@ export default function BasePage() {
   // Add new effect to handle table switching and data refresh
   useEffect(() => {
     if (tableId) {
-      // Reset the data state when switching tables
+      // Reset all view-related states when switching tables
+      setActiveFilter(undefined);
+      setActiveSort(undefined);
+      setHiddenColumns(new Set());
+      setActiveViewId(null);
       setData([]);
       setIsInitialLoading(true);
       // Refetch the table data
@@ -1215,7 +1418,10 @@ export default function BasePage() {
       {/* Column Toolbar */}
       <div className="flex items-center border-b border-gray-300 bg-white px-4 py-2 text-sm shadow-sm">
         <div className="flex items-center gap-1">
-          <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+          <button
+            className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100"
+            onClick={() => setIsViewsSidebarOpen(!isViewsSidebarOpen)}
+          >
             <Menu className="h-4 w-4" />
             <span>Views</span>
           </button>
@@ -1251,15 +1457,19 @@ export default function BasePage() {
             )}
           </div>
           <div className="relative">
-            <button 
+            <button
               className={`flex items-center gap-1.5 rounded px-2 py-1 ${
-                activeFilter ? 'bg-green-100 hover:bg-green-200' : 'hover:bg-gray-100'
+                activeFilter
+                  ? "bg-green-100 hover:bg-green-200"
+                  : "hover:bg-gray-100"
               }`}
               onClick={() => setIsFilterModalOpen(!isFilterModalOpen)}
             >
               <Filter className="h-4 w-4" />
               <span>
-                {activeFilter ? `Filtered by ${activeFilter.columnName}` : "Filter"}
+                {activeFilter
+                  ? `Filtered by ${activeFilter.columnName}`
+                  : "Filter"}
               </span>
             </button>
             {isFilterModalOpen && tableData?.pages[0]?.columns && (
@@ -1279,9 +1489,11 @@ export default function BasePage() {
             )}
           </div>
           <div className="relative">
-            <button 
+            <button
               className={`flex items-center gap-1.5 rounded px-2 py-1 ${
-                activeSort ? 'bg-[#fff2ea] hover:bg-orange-100' : 'hover:bg-gray-100'
+                activeSort
+                  ? "bg-[#fff2ea] hover:bg-orange-100"
+                  : "hover:bg-gray-100"
               }`}
               onClick={() => setIsSortModalOpen(!isSortModalOpen)}
             >
@@ -1390,159 +1602,174 @@ export default function BasePage() {
         </div>
       </div>
 
-      {/* Table Body */}
-      <div
-        className="flex-1 overflow-auto bg-white"
-        onClick={() => setSelectedCell(null)}
-      >
-        {isInitialLoading || isBaseLoading || isTablesLoading ? (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 className="mr-2 h-6 w-6 animate-spin text-gray-400" />
-            <span className="text-gray-600">Loading table data...</span>
-          </div>
-        ) : (
-          <div
-            ref={parentRef}
-            className="h-full overflow-auto"
-            onClick={() => setSelectedCell(null)}
-          >
-            {/* Table Container with max-width */}
-            <div className="inline-block min-w-[800px]">
-              {/* Table Header Row */}
-              <div className="sticky top-0 z-10 flex w-max bg-[#f4f4f4] text-sm text-gray-800">
-                <div className="flex">
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <div key={headerGroup.id} className="flex">
-                      {headerGroup.headers.map((header) => (
-                        <div
-                          key={header.id}
-                          style={{
-                            width: `${header.getSize()}px`,
-                            minWidth: `${header.getSize()}px`,
-                            height: "30px",
-                          }}
-                          className="border-r border-b border-gray-200 px-3 py-1 text-left"
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                  {/* Add field column with fixed width */}
-                  <div
-                    className="border-b border-r border-gray-200 px-3 py-1 text-left"
-                    style={{
-                      width: "90px",
-                      minWidth: "90px",
-                      height: "30px",
-                    }}
-                  >
-                    <button
-                      onClick={() => {
-                        if (!isAddingColumn) {
-                          setIsFieldModalOpen(!isFieldModalOpen);
-                          setFieldError("");
-                        }
-                      }}
-                      className="flex h-full w-full items-center justify-center text-lg font-medium text-gray-600 hover:text-gray-900"
-                      disabled={isAddingColumn}
-                    >
-                      {isAddingColumn ? "..." : "+"}
-                    </button>
-                    {isFieldModalOpen && (
-                      <div className="absolute z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
-                        <input
-                          type="text"
-                          placeholder="Field name"
-                          value={newFieldName}
-                          onChange={(e) => setNewFieldName(e.target.value)}
-                          className="mb-2 w-full rounded border px-2 py-1 text-sm"
-                        />
-                        <select
-                          value={newFieldType}
-                          onChange={(e) =>
-                            setNewFieldType(e.target.value as "text" | "number")
-                          }
-                          className="mb-2 w-full rounded border px-2 py-1 text-sm"
-                        >
-                          <option value="text">Text</option>
-                          <option value="number">Number</option>
-                        </select>
-                        {fieldError && (
-                          <p className="mb-2 text-xs text-red-600">
-                            {fieldError}
-                          </p>
-                        )}
-                        <button
-                          onClick={handleAddColumn}
-                          className="w-full rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-700"
-                          disabled={isAddingColumn}
-                        >
-                          {isAddingColumn ? "Adding..." : "Add Field"}
-                        </button>
+      {/* Main Content Area with Views Sidebar */}
+      <div className="relative flex-1 overflow-hidden">
+        {/* Views Sidebar */}
+        <ViewsSidebar
+          isOpen={isViewsSidebarOpen}
+          tableId={tableId}
+          activeViewId={activeViewId}
+          onViewSelect={handleViewSelect}
+        />
+
+        {/* Table Body */}
+        <div
+          className={`h-full transition-all duration-300 ease-in-out ${
+            isViewsSidebarOpen ? "pl-64" : "pl-0"
+          }`}
+          onClick={() => setSelectedCell(null)}
+        >
+          {isInitialLoading || isBaseLoading || isTablesLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="mr-2 h-6 w-6 animate-spin text-gray-400" />
+              <span className="text-gray-600">Loading table data...</span>
+            </div>
+          ) : (
+            <div
+              ref={parentRef}
+              className="h-full overflow-auto"
+              onClick={() => setSelectedCell(null)}
+            >
+              {/* Table Container with max-width */}
+              <div className="inline-block min-w-[800px]">
+                {/* Table Header Row */}
+                <div className="sticky top-0 z-10 flex w-max bg-[#f4f4f4] text-sm text-gray-800">
+                  <div className="flex">
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <div key={headerGroup.id} className="flex">
+                        {headerGroup.headers.map((header) => (
+                          <div
+                            key={header.id}
+                            style={{
+                              width: `${header.getSize()}px`,
+                              minWidth: `${header.getSize()}px`,
+                              height: "30px",
+                            }}
+                            className="border-r border-b border-gray-200 px-3 py-1 text-left"
+                          >
+                            {flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    )}
+                    ))}
+                    {/* Add field column with fixed width */}
+                    <div
+                      className="border-b border-r border-gray-200 px-3 py-1 text-left"
+                      style={{
+                        width: "90px",
+                        minWidth: "90px",
+                        height: "30px",
+                      }}
+                    >
+                      <button
+                        onClick={() => {
+                          if (!isAddingColumn) {
+                            setIsFieldModalOpen(!isFieldModalOpen);
+                            setFieldError("");
+                          }
+                        }}
+                        className="flex h-full w-full items-center justify-center text-lg font-medium text-gray-600 hover:text-gray-900"
+                        disabled={isAddingColumn}
+                      >
+                        {isAddingColumn ? "..." : "+"}
+                      </button>
+                      {isFieldModalOpen && (
+                        <div className="absolute z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
+                          <input
+                            type="text"
+                            placeholder="Field name"
+                            value={newFieldName}
+                            onChange={(e) => setNewFieldName(e.target.value)}
+                            className="mb-2 w-full rounded border px-2 py-1 text-sm"
+                          />
+                          <select
+                            value={newFieldType}
+                            onChange={(e) =>
+                              setNewFieldType(
+                                e.target.value as "text" | "number"
+                              )
+                            }
+                            className="mb-2 w-full rounded border px-2 py-1 text-sm"
+                          >
+                            <option value="text">Text</option>
+                            <option value="number">Number</option>
+                          </select>
+                          {fieldError && (
+                            <p className="mb-2 text-xs text-red-600">
+                              {fieldError}
+                            </p>
+                          )}
+                          <button
+                            onClick={handleAddColumn}
+                            className="w-full rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-700"
+                            disabled={isAddingColumn}
+                          >
+                            {isAddingColumn ? "Adding..." : "Add Field"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                </div>
+
+                {/* Virtualized Table Body */}
+                <div
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize()}px`,
+                    position: "relative",
+                  }}
+                >
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const row = table.getRowModel().rows[virtualRow.index];
+                    if (!row) return null;
+                    return (
+                      <div
+                        key={row.id ?? virtualRow.index}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          transform: `translateY(${virtualRow.start}px)`,
+                          height: "35px",
+                        }}
+                        className="flex border-b border-gray-200"
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <div
+                            key={cell.id}
+                            style={{
+                              width: `${cell.column.getSize()}px`,
+                              minWidth: `${cell.column.getSize()}px`,
+                              height: "100%",
+                            }}
+                            className="border-r border-gray-200"
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Virtualized Table Body */}
-              <div
-                style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  position: "relative",
-                }}
-              >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const row = table.getRowModel().rows[virtualRow.index];
-                  if (!row) return null;
-                  return (
-                    <div
-                      key={row.id ?? virtualRow.index}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        transform: `translateY(${virtualRow.start}px)`,
-                        height: "35px",
-                      }}
-                      className="flex border-b border-gray-200"
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <div
-                          key={cell.id}
-                          style={{
-                            width: `${cell.column.getSize()}px`,
-                            minWidth: `${cell.column.getSize()}px`,
-                            height: "100%",
-                          }}
-                          className="border-r border-gray-200"
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
+              {/* Loading indicator for pagination */}
+              {isLoadingMore && (
+                <div className="sticky bottom-0 flex w-full items-center justify-center bg-white/80 py-2 shadow-md">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin text-gray-400" />
+                  <span className="text-sm text-gray-500">
+                    Loading more rows...
+                  </span>
+                </div>
+              )}
             </div>
-
-            {/* Loading indicator for pagination */}
-            {isLoadingMore && (
-              <div className="sticky bottom-0 flex w-full items-center justify-center bg-white/80 py-2 shadow-md">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin text-gray-400" />
-                <span className="text-sm text-gray-500">
-                  Loading more rows...
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Footer with Add Record buttons */}

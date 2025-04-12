@@ -59,10 +59,20 @@ export const tableRouter = createTRPCRouter({
         });
       }
 
+      // Create a default Grid view
+      await ctx.db.view.create({
+        data: {
+          name: "Grid view 1",
+          type: "grid",
+          tableId: table.id,
+          hiddenColumns: [],
+        },
+      });
+
       return table;
     }),
 
-    getTableData: protectedProcedure
+  getTableData: protectedProcedure
     .input(
       z.object({
         tableId: z.string(),
@@ -94,25 +104,28 @@ export const tableRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const { tableId, searchQuery, limit = 50, cursor, filter, sort } = input;
-  
+
       const columns = await ctx.db.column.findMany({
         where: { tableId },
         orderBy: { order: "asc" },
       });
-  
+
       type Row = {
         id: string;
         tableId: string;
         order: number;
         data: Record<string, unknown>;
       };
-  
+
       // Parse the cursor if provided
       let cursorData: CursorData | null = null;
       if (cursor) {
         try {
           const parsed = JSON.parse(cursor) as CursorData;
-          if (typeof parsed.order === 'number' && typeof parsed.id === 'string') {
+          if (
+            typeof parsed.order === "number" &&
+            typeof parsed.id === "string"
+          ) {
             cursorData = parsed;
           }
         } catch (e) {
@@ -120,7 +133,7 @@ export const tableRouter = createTRPCRouter({
           console.error("Invalid cursor format:", e);
         }
       }
-  
+
       // Get rows with proper database-level sorting and keyset pagination
       const rows = await ctx.db.$queryRaw<Row[]>`
         SELECT * FROM "Row"
@@ -186,48 +199,88 @@ export const tableRouter = createTRPCRouter({
                         (
                           (
                             data->>${sort.columnName} ~ '^[0-9]+$' AND 
-                            CAST(data->>${sort.columnName} AS NUMERIC) > ${cursorData.value ?? 0}
+                            CAST(data->>${sort.columnName} AS NUMERIC) > ${
+                        cursorData.value ?? 0
+                      }
                           ) OR
                           (
-                            (data->>${sort.columnName} !~ '^[0-9]+$' OR data->>${sort.columnName} IS NULL) AND
+                            (data->>${
+                              sort.columnName
+                            } !~ '^[0-9]+$' OR data->>${
+                        sort.columnName
+                      } IS NULL) AND
                             ${cursorData.isNumeric ?? false}
                           ) OR
                           (
                             data->>${sort.columnName} !~ '^[0-9]+$' AND 
                             data->>${sort.columnName} IS NOT NULL AND
                             NOT ${cursorData.isNumeric ?? false} AND
-                            CAST(data->>${sort.columnName} AS TEXT) > ${cursorData.textValue ?? ''}
+                            CAST(data->>${sort.columnName} AS TEXT) > ${
+                        cursorData.textValue ?? ""
+                      }
                           )
                         ) OR (
                           (
-                            (data->>${sort.columnName} ~ '^[0-9]+$' AND CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value ?? 0}) OR
-                            (data->>${sort.columnName} !~ '^[0-9]+$' AND data->>${sort.columnName} IS NOT NULL AND CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue ?? ''})
+                            (data->>${
+                              sort.columnName
+                            } ~ '^[0-9]+$' AND CAST(data->>${
+                        sort.columnName
+                      } AS NUMERIC) = ${cursorData.value ?? 0}) OR
+                            (data->>${
+                              sort.columnName
+                            } !~ '^[0-9]+$' AND data->>${
+                        sort.columnName
+                      } IS NOT NULL AND CAST(data->>${
+                        sort.columnName
+                      } AS TEXT) = ${cursorData.textValue ?? ""})
                           ) AND
-                          ("order" > ${cursorData.order} OR ("order" = ${cursorData.order} AND "id" > ${cursorData.id}))
+                          ("order" > ${cursorData.order} OR ("order" = ${
+                        cursorData.order
+                      } AND "id" > ${cursorData.id}))
                         )
                       `
                     : PrismaNamespace.sql`
                         (
                           (
                             data->>${sort.columnName} ~ '^[0-9]+$' AND 
-                            CAST(data->>${sort.columnName} AS NUMERIC) < ${cursorData.value ?? 0}
+                            CAST(data->>${sort.columnName} AS NUMERIC) < ${
+                        cursorData.value ?? 0
+                      }
                           ) OR
                           (
-                            (data->>${sort.columnName} !~ '^[0-9]+$' OR data->>${sort.columnName} IS NULL) AND
+                            (data->>${
+                              sort.columnName
+                            } !~ '^[0-9]+$' OR data->>${
+                        sort.columnName
+                      } IS NULL) AND
                             NOT ${cursorData.isNumeric ?? false}
                           ) OR
                           (
                             data->>${sort.columnName} !~ '^[0-9]+$' AND 
                             data->>${sort.columnName} IS NOT NULL AND
                             ${cursorData.isNumeric ?? false} AND
-                            CAST(data->>${sort.columnName} AS TEXT) < ${cursorData.textValue ?? ''}
+                            CAST(data->>${sort.columnName} AS TEXT) < ${
+                        cursorData.textValue ?? ""
+                      }
                           )
                         ) OR (
                           (
-                            (data->>${sort.columnName} ~ '^[0-9]+$' AND CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value ?? 0}) OR
-                            (data->>${sort.columnName} !~ '^[0-9]+$' AND data->>${sort.columnName} IS NOT NULL AND CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue ?? ''})
+                            (data->>${
+                              sort.columnName
+                            } ~ '^[0-9]+$' AND CAST(data->>${
+                        sort.columnName
+                      } AS NUMERIC) = ${cursorData.value ?? 0}) OR
+                            (data->>${
+                              sort.columnName
+                            } !~ '^[0-9]+$' AND data->>${
+                        sort.columnName
+                      } IS NOT NULL AND CAST(data->>${
+                        sort.columnName
+                      } AS TEXT) = ${cursorData.textValue ?? ""})
                           ) AND
-                          ("order" < ${cursorData.order} OR ("order" = ${cursorData.order} AND "id" < ${cursorData.id}))
+                          ("order" < ${cursorData.order} OR ("order" = ${
+                        cursorData.order
+                      } AND "id" < ${cursorData.id}))
                         )
                       `
                 }
@@ -259,35 +312,40 @@ export const tableRouter = createTRPCRouter({
         }
         LIMIT ${limit + 1}
       `;
-  
+
       const hasNextPage = rows.length > limit;
       const lastRow = hasNextPage ? rows[limit - 1] : null;
-      
+
       // Create a new cursor that contains both the sort value and row ID
       let nextCursor = null;
       if (lastRow && sort) {
         const sortValue = lastRow.data[sort.columnName];
-        const isNumeric = typeof sortValue === 'number' || 
-                          (typeof sortValue === 'string' && /^[0-9]+$/.test(sortValue));
-        
+        const isNumeric =
+          typeof sortValue === "number" ||
+          (typeof sortValue === "string" && /^[0-9]+$/.test(sortValue));
+
         nextCursor = JSON.stringify({
           value: isNumeric ? Number(sortValue) : null,
-          textValue: typeof sortValue === 'string' ? sortValue : 
-                    typeof sortValue === 'number' ? String(sortValue) : '',
+          textValue:
+            typeof sortValue === "string"
+              ? sortValue
+              : typeof sortValue === "number"
+              ? String(sortValue)
+              : "",
           isNumeric,
           order: lastRow.order,
-          id: lastRow.id
+          id: lastRow.id,
         });
       } else if (lastRow) {
         // If there's no sort, use row order
         nextCursor = JSON.stringify({
           order: lastRow.order,
-          id: lastRow.id
+          id: lastRow.id,
         });
       }
-  
+
       const currentPageRows = hasNextPage ? rows.slice(0, -1) : rows;
-  
+
       return {
         columns,
         rows: currentPageRows,
