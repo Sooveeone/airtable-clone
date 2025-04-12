@@ -1111,16 +1111,18 @@ export default function BasePage() {
       if (lastRow && typeof lastRow.order === 'number') {
         startOrder = lastRow.order;
       } else {
-        // If we can't get the order from the last row, use the length
         startOrder = currentData.length;
       }
       
       // Use larger batch size
-      const batchSize = 5000; // Significantly increased from 30
+      const batchSize = 5000;
       const batches = Math.ceil(count / batchSize);
       
+      // Track when to refresh data
+      let lastRefreshTime = Date.now();
+      const REFRESH_INTERVAL = 2000; // Refresh every 2 seconds
+      
       for (let i = 0; i < batches; i++) {
-        // Check if operation should be canceled
         if (shouldCancelBulkRowsRef.current) {
           console.log("Cancelling bulk row addition");
           break;
@@ -1135,7 +1137,7 @@ export default function BasePage() {
         );
         
         try {
-          // Send the batch to the server with the start order
+          // Send the batch to the server
           await createRowsMutation.mutateAsync({
             tableId,
             rows: fakeRecords,
@@ -1149,16 +1151,12 @@ export default function BasePage() {
             total: count,
           });
           
-          // For UI feedback, only add a sample of rows
-          if (i < 2) {
-            // Add the first 100 rows to the UI for visual feedback
-            const displayCount = Math.min(fakeRecords.length, 100);
-            const tempRows = fakeRecords.slice(0, displayCount).map((record, index) => ({
-              id: `temp-${Date.now()}-${index}`, // Temporary ID
-              ...record,
-            }));
-            
-            setData(prev => [...prev, ...tempRows]);
+          // Check if we should refresh the data
+          const currentTime = Date.now();
+          if (currentTime - lastRefreshTime >= REFRESH_INTERVAL) {
+            console.log("Refreshing table data...");
+            await refetch();
+            lastRefreshTime = currentTime;
           }
           
           // Brief pause to allow UI updates
@@ -1170,9 +1168,9 @@ export default function BasePage() {
         }
       }
       
-      // After all batches, trigger a data refresh
-      console.log("All batches processed, refreshing data");
+      // Final refresh after all batches
       if (!shouldCancelBulkRowsRef.current) {
+        console.log("Final refresh of table data");
         void refetch();
       }
       
