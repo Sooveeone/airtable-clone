@@ -45,6 +45,7 @@ import { SortPopover } from "./SortPopover";
 import { HideFieldsPopover } from "./HideFieldsPopover";
 import { ViewsSidebar } from "./ViewsSidebar";
 
+
 // -------------------------------------------------------------------------
 // Types and Helpers
 // -------------------------------------------------------------------------
@@ -1100,53 +1101,86 @@ export default function BasePage() {
     setIsAddingBulkRows(true);
     setBulkRowProgress({ current: 0, total: count });
     shouldCancelBulkRowsRef.current = false;
-
-    const batchSize = 30; // Number of rows per batch
-    const batches = Math.ceil(count / batchSize);
-
-    for (let i = 0; i < batches; i++) {
-      // Check if we should cancel the operation
-      if (shouldCancelBulkRowsRef.current) {
-        console.log("Cancelling bulk row addition");
-        break;
+  
+    try {
+      // Find the current max order
+      const currentData = dataRef.current;
+      const lastRow = currentData[currentData.length - 1];
+      let startOrder = 0;
+      
+      if (lastRow && typeof lastRow.order === 'number') {
+        startOrder = lastRow.order;
+      } else {
+        // If we can't get the order from the last row, use the length
+        startOrder = currentData.length;
       }
-
-      const batchCount = Math.min(batchSize, count - i * batchSize);
-      const fakeRecords = Array.from({ length: batchCount }, () =>
-        generateFakeRecord(columns)
-      );
-
-      try {
-        const res = await createRowsMutation.mutateAsync({
-          tableId,
-          rows: fakeRecords,
-        });
-
-        const newFormattedRows = res.map((row) => ({
-          id: row.id,
-          ...(row.data as Record<string, string | number | null>),
-        }));
-
-        // Append new rows to data and show them on screen
-        setData((prev) => [...prev, ...newFormattedRows]);
-
-        // Update progress
-        setBulkRowProgress((prev) => ({
-          current: prev.current + batchCount,
-          total: count,
-        }));
-
-        // Optional: Give time for UI to catch up (good for slower devices)
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (err) {
-        console.error("Failed to create batch:", err);
-        break;
+      
+      // Use larger batch size
+      const batchSize = 5000; // Significantly increased from 30
+      const batches = Math.ceil(count / batchSize);
+      
+      for (let i = 0; i < batches; i++) {
+        // Check if operation should be canceled
+        if (shouldCancelBulkRowsRef.current) {
+          console.log("Cancelling bulk row addition");
+          break;
+        }
+        
+        const batchCount = Math.min(batchSize, count - i * batchSize);
+        const batchStartOrder = startOrder + i * batchSize;
+        
+        // Generate fake records for this batch
+        const fakeRecords = Array.from({ length: batchCount }, () => 
+          generateFakeRecord(columns)
+        );
+        
+        try {
+          // Send the batch to the server with the start order
+          await createRowsMutation.mutateAsync({
+            tableId,
+            rows: fakeRecords,
+            startOrder: batchStartOrder,
+          });
+          
+          // Update progress
+          const newProgress = Math.min((i + 1) * batchSize, count);
+          setBulkRowProgress({
+            current: newProgress,
+            total: count,
+          });
+          
+          // For UI feedback, only add a sample of rows
+          if (i < 2) {
+            // Add the first 100 rows to the UI for visual feedback
+            const displayCount = Math.min(fakeRecords.length, 100);
+            const tempRows = fakeRecords.slice(0, displayCount).map((record, index) => ({
+              id: `temp-${Date.now()}-${index}`, // Temporary ID
+              ...record,
+            }));
+            
+            setData(prev => [...prev, ...tempRows]);
+          }
+          
+          // Brief pause to allow UI updates
+          await new Promise(resolve => setTimeout(resolve, 0));
+          
+        } catch (err) {
+          console.error("Failed to create batch:", err);
+          break;
+        }
       }
+      
+      // After all batches, trigger a data refresh
+      console.log("All batches processed, refreshing data");
+      if (!shouldCancelBulkRowsRef.current) {
+        void refetch();
+      }
+      
+    } finally {
+      setIsSaving(false);
+      setIsAddingBulkRows(false);
+      shouldCancelBulkRowsRef.current = false;
     }
-
-    setIsSaving(false);
-    setIsAddingBulkRows(false);
-    shouldCancelBulkRowsRef.current = false;
   };
 
   // Add a function to cancel the bulk row addition

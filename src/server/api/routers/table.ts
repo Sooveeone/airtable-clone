@@ -538,38 +538,46 @@ export const tableRouter = createTRPCRouter({
 
   // For the createRows mutation - batch creation
   createRows: protectedProcedure
-    .input(
-      z.object({
-        tableId: z.string(),
-        rows: z.array(
-          z.record(z.string(), z.union([z.string(), z.number(), z.null()]))
-        ),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      // 1. Get the current max order
+  .input(
+    z.object({
+      tableId: z.string(),
+      rows: z.array(
+        z.record(z.string(), z.union([z.string(), z.number(), z.null()]))
+      ),
+      startOrder: z.number().optional(),
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    // Use the provided startOrder or get the current max order
+    let startOrder = input.startOrder;
+    
+    if (startOrder === undefined) {
       const lastRow = await ctx.db.row.findFirst({
         where: { tableId: input.tableId },
         orderBy: { order: "desc" },
       });
+      startOrder = (lastRow?.order ?? 0);
+    }
+    
+    // Prepare all row data for bulk insert
+    const rowsToCreate = input.rows.map((rowData, index) => ({
+      tableId: input.tableId,
+      order: startOrder + index + 1,
+      data: rowData,
+    }));
+    
+    // Use createMany for bulk insertion
+    const result = await ctx.db.row.createMany({
+      data: rowsToCreate,
+      skipDuplicates: false,
+    });
+    
+    return {
+      count: result.count,
+      success: true
+    };
+  }),
 
-      let currentOrder = lastRow?.order ?? 0;
-
-      // 2. Add rows with incrementing order
-      const createdRows = [];
-      for (const rowData of input.rows) {
-        const row = await ctx.db.row.create({
-          data: {
-            tableId: input.tableId,
-            order: ++currentOrder,
-            data: rowData,
-          },
-        });
-        createdRows.push(row);
-      }
-
-      return createdRows;
-    }),
 
   // Delete Row route
   deleteRow: protectedProcedure
