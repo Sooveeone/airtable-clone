@@ -45,6 +45,13 @@ import { SortPopover } from "./SortPopover";
 import { HideFieldsPopover } from "./HideFieldsPopover";
 import { ViewsSidebar } from "./ViewsSidebar";
 
+// Client-side only UserButton wrapper
+import dynamic from "next/dynamic";
+
+const ClientUserButton = dynamic(
+  () => Promise.resolve(() => <UserButton />),
+  { ssr: false }
+);
 
 // -------------------------------------------------------------------------
 // Types and Helpers
@@ -1343,7 +1350,7 @@ export default function BasePage() {
             </svg>
           </button>
           <div className="flex h-8 w-8 items-center justify-center">
-            <UserButton></UserButton>
+            <ClientUserButton />
           </div>
         </div>
       </div>

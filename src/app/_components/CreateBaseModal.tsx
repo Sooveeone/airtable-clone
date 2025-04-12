@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "~/trpc/react";
+import { api } from "@/trpc/react";
+import { CreateBaseLoadingPage } from "./CreateBaseLoadingPage";
 
 interface CreateBaseModalProps {
   isOpen: boolean;
@@ -22,12 +23,12 @@ export function CreateBaseModal({ isOpen, onClose }: CreateBaseModalProps) {
       });
 
       setName("");
-      onClose();
       router.push(`/base/${data.id}`);
     },
     onError: (err) => {
       console.error("Error creating base:", err);
       alert("Failed to create base. Please try again.");
+      onClose();
     },
   });
 
@@ -43,6 +44,10 @@ export function CreateBaseModal({ isOpen, onClose }: CreateBaseModalProps) {
 
     createBase.mutate({ name });
   };
+
+  if (isLoading) {
+    return <CreateBaseLoadingPage />;
+  }
 
   if (!isOpen) return null;
 
@@ -88,7 +93,7 @@ export function CreateBaseModal({ isOpen, onClose }: CreateBaseModalProps) {
                 className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                 disabled={isLoading}
               >
-                {isLoading ? "Creating..." : "Create Base"}
+                Create Base
               </button>
             </div>
           </form>
