@@ -44,7 +44,6 @@ import { FilterPopover } from "./FilterPopover";
 import { SortPopover } from "./SortPopover";
 import { HideFieldsPopover } from "./HideFieldsPopover";
 import { ViewsSidebar } from "./ViewsSidebar";
-import { type Prisma } from "@prisma/client";
 
 // -------------------------------------------------------------------------
 // Types and Helpers
@@ -462,18 +461,7 @@ export default function BasePage() {
   // Add this after other state declarations
   const [isHideFieldsOpen, setIsHideFieldsOpen] = useState(false);
 
-  const previousSettingsRef = useRef<{
-    filter?: typeof activeFilter;
-    sort?: typeof activeSort;
-    hiddenColumns?: string[];
-  } | null>(null);
-
-  // Add a ref to track the current view's settings
-  const currentViewSettingsRef = useRef<{
-    filter: typeof activeFilter;
-    sort: typeof activeSort;
-    hiddenColumns: string[];
-  } | null>(null);
+  const lastUpdateRef = useRef<string | null>(null);
 
   // Focus search input when modal opens
   useEffect(() => {
@@ -534,16 +522,11 @@ export default function BasePage() {
   );
   const [activeSort, setActiveSort] = useState<SortType | undefined>();
 
-  // Add a ref to track the last update
-  const lastUpdateRef = useRef<string | null>(null);
-
-  const utils = api.useUtils();
-
   // Create a stable callback for updating view settings
   const updateViewSettings = useCallback(
     (viewId: string, settings: {
-      filter?: FilterType;
-      sort?: SortType;
+      filter: FilterType | null;
+      sort: SortType | null;
       hiddenColumns: string[];
     }) => {
       // Create a hash of the settings to compare
@@ -615,17 +598,17 @@ export default function BasePage() {
     const currentView = views?.find((v) => v.id === activeViewId);
     if (!currentView) return;
 
-    // Get current settings, using undefined for optional parameters
+    // Get current settings, converting undefined to null for database storage
     const currentSettings = {
-      filter: activeFilter,
-      sort: activeSort,
+      filter: activeFilter ?? null,
+      sort: activeSort ?? null,
       hiddenColumns: Array.from(hiddenColumns)
     };
 
     // Skip if nothing has changed from the view's current settings
     const viewSettings = {
-      filter: currentView.filter ? (currentView.filter as FilterType) : undefined,
-      sort: currentView.sort ? (currentView.sort as SortType) : undefined,
+      filter: currentView.filter ?? null,
+      sort: currentView.sort ?? null,
       hiddenColumns: Array.isArray(currentView.hiddenColumns)
         ? currentView.hiddenColumns.filter(
             (col): col is string => typeof col === "string"

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { Column } from "@/app/_types/base";
 import { Switch } from "@/components/ui/switch";
 import { X } from "lucide-react";
