@@ -797,7 +797,7 @@ export default function BasePage() {
   } = api.table.getTableData.useInfiniteQuery(
     {
       tableId: tableId ?? "",
-      limit: 100,
+      limit: 150,
       searchQuery,
       filter: activeFilter,
       sort: activeSort,
@@ -1323,7 +1323,7 @@ export default function BasePage() {
     count: table.getRowModel().rows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 35,
-    overscan: 15,
+    overscan: 25,
     onChange: (virtualizer) => {
       const lastItem = virtualizer.getVirtualItems().slice(-1)[0];
       if (
