@@ -797,7 +797,7 @@ export default function BasePage() {
   } = api.table.getTableData.useInfiniteQuery(
     {
       tableId: tableId ?? "",
-      limit: 100,
+      limit: 150,
       searchQuery,
       filter: activeFilter,
       sort: activeSort,
@@ -1323,7 +1323,7 @@ export default function BasePage() {
     count: table.getRowModel().rows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 35,
-    overscan: 15,
+    overscan: 35,
     onChange: (virtualizer) => {
       const lastItem = virtualizer.getVirtualItems().slice(-1)[0];
       if (
@@ -1338,18 +1338,18 @@ export default function BasePage() {
   });
 
   // Add a delayed loading state with shorter timeout
-  const [showLoading, setShowLoading] = useState(false);
-  useEffect(() => {
-    let timeout: NodeJS.Timeout;
-    if (isFetchingNextPage) {
-      timeout = setTimeout(() => {
-        setShowLoading(true);
-      }, 500);
-    } else {
-      setShowLoading(false);
-    }
-    return () => clearTimeout(timeout);
-  }, [isFetchingNextPage]);
+  // const [showLoading, setShowLoading] = useState(false);
+  // useEffect(() => {
+  //   let timeout: NodeJS.Timeout;
+  //   if (isFetchingNextPage) {
+  //     timeout = setTimeout(() => {
+  //       setShowLoading(true);
+  //     }, 500);
+  //   } else {
+  //     setShowLoading(false);
+  //   }
+  //   return () => clearTimeout(timeout);
+  // }, [isFetchingNextPage]);
 
   // Add a function to save all pending changes before navigating away
   const saveAllPendingChanges = async () => {
@@ -1916,7 +1916,7 @@ export default function BasePage() {
                 </div>
               </div>
 
-              {/* Loading indicator for pagination */}
+              {/* Loading indicator for pagination
               {showLoading && (
                 <div className="sticky bottom-0 flex w-full items-center justify-center bg-white/80 py-2 shadow-md">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin text-gray-400" />
@@ -1924,7 +1924,7 @@ export default function BasePage() {
                     Loading more rows...
                   </span>
                 </div>
-              )}
+              )} */}
             </div>
           )}
         </div>
