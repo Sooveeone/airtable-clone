@@ -44,6 +44,7 @@ import { FilterPopover } from "./FilterPopover";
 import { SortPopover } from "./SortPopover";
 import { HideFieldsPopover } from "./HideFieldsPopover";
 import { ViewsSidebar } from "./ViewsSidebar";
+import { useOnClickOutside } from 'usehooks-ts';
 
 // Client-side only UserButton wrapper
 import dynamic from "next/dynamic";
@@ -372,6 +373,7 @@ function RowNumberCell({
     left: number;
   } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -381,6 +383,23 @@ function RowNumberCell({
     }
     setOpen(!open);
   };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [open]);
 
   return (
     <div className="relative flex h-full w-full items-center px-2">
@@ -400,6 +419,7 @@ function RowNumberCell({
         popupPos &&
         createPortal(
           <div
+            ref={menuRef}
             className="fixed z-50 w-28 rounded border bg-white shadow-md"
             style={{
               left: popupPos.left,
@@ -427,6 +447,8 @@ function RowNumberCell({
 // -------------------------------------------------------------------------
 export default function BasePage() {
   const { baseId } = useParams();
+  
+  // All state declarations
   const [data, setData] = useState<RecordRow[]>([]);
   const [selectedCell, setSelectedCell] = useState<{
     rowIndex: number;
@@ -446,30 +468,133 @@ export default function BasePage() {
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isSortModalOpen, setIsSortModalOpen] = useState(false);
-  const addTableButtonRef = useRef<HTMLDivElement>(null);
-  const parentRef = useRef<HTMLDivElement>(null);
-  const initialTableCreationAttempted = useRef(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // Add state for tracking bulk row addition progress
+  const [isFieldModalOpen, setIsFieldModalOpen] = useState(false);
+  const [isHideFieldsOpen, setIsHideFieldsOpen] = useState(false);
   const [isAddingBulkRows, setIsAddingBulkRows] = useState(false);
   const [bulkRowProgress, setBulkRowProgress] = useState({
     current: 0,
     total: 0,
   });
+  const [newFieldName, setNewFieldName] = useState("");
+  const [newFieldType, setNewFieldType] = useState<"text" | "number">("text");
+  const [fieldError, setFieldError] = useState("");
 
-  // Add a ref to track edited cells
-  const editedCellsRef = useRef<Map<string, { value: string | number | null }>>(
-    new Map()
-  );
-
-  // Add a ref to track if the bulk row addition should be cancelled
+  // All refs
+  const addTableButtonRef = useRef<HTMLDivElement>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
+  const initialTableCreationAttempted = useRef(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const editedCellsRef = useRef<Map<string, { value: string | number | null }>>(new Map());
   const shouldCancelBulkRowsRef = useRef(false);
-
-  // Add this after other state declarations
-  const [isHideFieldsOpen, setIsHideFieldsOpen] = useState(false);
-
   const lastUpdateRef = useRef<string | null>(null);
+  const searchModalRef = useRef<HTMLDivElement>(null);
+  const filterPopoverRef = useRef<HTMLDivElement>(null);
+  const sortPopoverRef = useRef<HTMLDivElement>(null);
+  const hideFieldsRef = useRef<HTMLDivElement>(null);
+  const addFieldModalRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside for each popup
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (searchModalRef.current && !searchModalRef.current.contains(e.target as Node)) {
+        setIsSearchModalOpen(false);
+      }
+    };
+    if (isSearchModalOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isSearchModalOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (filterPopoverRef.current && !filterPopoverRef.current.contains(e.target as Node)) {
+        setIsFilterModalOpen(false);
+      }
+    };
+    if (isFilterModalOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isFilterModalOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (sortPopoverRef.current && !sortPopoverRef.current.contains(e.target as Node)) {
+        setIsSortModalOpen(false);
+      }
+    };
+    if (isSortModalOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isSortModalOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (hideFieldsRef.current && !hideFieldsRef.current.contains(e.target as Node)) {
+        setIsHideFieldsOpen(false);
+      }
+    };
+    if (isHideFieldsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isHideFieldsOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (addFieldModalRef.current && !addFieldModalRef.current.contains(e.target as Node)) {
+        setIsFieldModalOpen(false);
+      }
+    };
+    if (isFieldModalOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isFieldModalOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (addTableButtonRef.current && !addTableButtonRef.current.contains(e.target as Node)) {
+        setIsAddTableMenuOpen(false);
+      }
+    };
+    if (isAddTableMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isAddTableMenuOpen]);
+
+  // Close search modal and clear search query when switching tables or views
+  useEffect(() => {
+    setIsSearchModalOpen(false);
+    setSearchQuery("");
+  }, [tableId, activeViewId]);
 
   // Focus search input when modal opens
   useEffect(() => {
@@ -672,7 +797,7 @@ export default function BasePage() {
   } = api.table.getTableData.useInfiniteQuery(
     {
       tableId: tableId ?? "",
-      limit: 50,
+      limit: 100,
       searchQuery,
       filter: activeFilter,
       sort: activeSort,
@@ -860,16 +985,13 @@ export default function BasePage() {
   const handleDeleteColumn = useCallback(
     (name: string) => {
       if (!tableId) return;
-      setData((prevData) =>
-        prevData.map((row) => {
-          const newRow = { ...row };
-          delete newRow[name];
-          return newRow;
-        })
-      );
-      deleteColumnMutation.mutate({ tableId, columnName: name });
+      deleteColumnMutation.mutate({ tableId, columnName: name }, {
+        onSuccess: () => {
+          void refetch();
+        }
+      });
     },
-    [tableId, deleteColumnMutation]
+    [tableId, deleteColumnMutation, refetch]
   );
 
   // Update the deleteRowMutation to track deleted rows
@@ -1020,11 +1142,6 @@ export default function BasePage() {
     },
   });
 
-  const [newFieldName, setNewFieldName] = useState("");
-  const [newFieldType, setNewFieldType] = useState<"text" | "number">("text");
-  const [fieldError, setFieldError] = useState("");
-  const [isFieldModalOpen, setIsFieldModalOpen] = useState(false);
-
   const handleAddColumn = () => {
     if (!newFieldName.trim()) {
       setFieldError("Field name is required.");
@@ -1047,11 +1164,20 @@ export default function BasePage() {
       tableId,
       name: newFieldName,
       type: newFieldType,
+    }, {
+      onSuccess: () => {
+        void refetch();
+        setIsAddingColumn(false);
+        setNewFieldName("");
+        setNewFieldType("text");
+        setFieldError("");
+        setIsFieldModalOpen(false);
+      },
+      onError: (error) => {
+        console.error("Failed to add column:", error);
+        setIsAddingColumn(false);
+      }
     });
-    setNewFieldName("");
-    setNewFieldType("text");
-    setFieldError("");
-    setIsFieldModalOpen(false);
   };
 
   const createRowsMutation = api.table.createRows.useMutation();
@@ -1080,21 +1206,12 @@ export default function BasePage() {
     });
 
     try {
-      const newRow = await createRowMutation.mutateAsync({
+      await createRowMutation.mutateAsync({
         tableId,
         defaultData,
       });
-      setData((prev) => {
-        const exists = prev.some((row) => row.id === newRow.id);
-        if (exists) return prev;
-        return [
-          {
-            id: newRow.id,
-            ...(newRow.data as Record<string, string | number | null>),
-          },
-          ...prev,
-        ];
-      });
+      // Just refetch to get the latest data
+      void refetch();
     } catch (error) {
       console.error("Failed to create row:", error);
     } finally {
@@ -1206,20 +1323,33 @@ export default function BasePage() {
     count: table.getRowModel().rows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 35,
-    overscan: 10,
+    overscan: 15,
     onChange: (virtualizer) => {
       const lastItem = virtualizer.getVirtualItems().slice(-1)[0];
       if (
         lastItem &&
-        lastItem.index >= data.length - 1 &&
+        lastItem.index >= data.length - 10 &&
         hasNextPage &&
         !isFetchingNextPage
       ) {
-        setIsLoadingMore(true);
         void fetchNextPage();
       }
     },
   });
+
+  // Add a delayed loading state with shorter timeout
+  const [showLoading, setShowLoading] = useState(false);
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (isFetchingNextPage) {
+      timeout = setTimeout(() => {
+        setShowLoading(true);
+      }, 500);
+    } else {
+      setShowLoading(false);
+    }
+    return () => clearTimeout(timeout);
+  }, [isFetchingNextPage]);
 
   // Add a function to save all pending changes before navigating away
   const saveAllPendingChanges = async () => {
@@ -1470,12 +1600,14 @@ export default function BasePage() {
               </span>
             </button>
             {isHideFieldsOpen && tableData?.pages[0]?.columns && (
-              <HideFieldsPopover
-                columns={tableData.pages[0].columns}
-                hiddenColumns={hiddenColumns}
-                onToggleColumn={handleToggleColumn}
-                onClose={() => setIsHideFieldsOpen(false)}
-              />
+              <div ref={hideFieldsRef}>
+                <HideFieldsPopover
+                  columns={tableData.pages[0].columns}
+                  hiddenColumns={hiddenColumns}
+                  onToggleColumn={handleToggleColumn}
+                  onClose={() => setIsHideFieldsOpen(false)}
+                />
+              </div>
             )}
           </div>
           <div className="relative">
@@ -1495,19 +1627,21 @@ export default function BasePage() {
               </span>
             </button>
             {isFilterModalOpen && tableData?.pages[0]?.columns && (
-              <FilterPopover
-                columns={tableData.pages[0].columns}
-                onApplyFilter={(filter) => {
-                  setActiveFilter(filter);
-                  setIsFilterModalOpen(false);
-                }}
-                onClose={() => setIsFilterModalOpen(false)}
-                activeFilter={activeFilter}
-                onClearFilter={() => {
-                  setActiveFilter(undefined);
-                  setIsFilterModalOpen(false);
-                }}
-              />
+              <div ref={filterPopoverRef}>
+                <FilterPopover
+                  columns={tableData.pages[0].columns}
+                  onApplyFilter={(filter) => {
+                    setActiveFilter(filter);
+                    setIsFilterModalOpen(false);
+                  }}
+                  onClose={() => setIsFilterModalOpen(false)}
+                  activeFilter={activeFilter}
+                  onClearFilter={() => {
+                    setActiveFilter(undefined);
+                    setIsFilterModalOpen(false);
+                  }}
+                />
+              </div>
             )}
           </div>
           <div className="relative">
@@ -1525,19 +1659,21 @@ export default function BasePage() {
               </span>
             </button>
             {isSortModalOpen && tableData?.pages[0]?.columns && (
-              <SortPopover
-                columns={tableData.pages[0].columns}
-                onApplySort={(sort) => {
-                  setActiveSort(sort);
-                  setIsSortModalOpen(false);
-                }}
-                onClose={() => setIsSortModalOpen(false)}
-                activeSort={activeSort}
-                onClearSort={() => {
-                  setActiveSort(undefined);
-                  setIsSortModalOpen(false);
-                }}
-              />
+              <div ref={sortPopoverRef}>
+                <SortPopover
+                  columns={tableData.pages[0].columns}
+                  onApplySort={(sort) => {
+                    setActiveSort(sort);
+                    setIsSortModalOpen(false);
+                  }}
+                  onClose={() => setIsSortModalOpen(false)}
+                  activeSort={activeSort}
+                  onClearSort={() => {
+                    setActiveSort(undefined);
+                    setIsSortModalOpen(false);
+                  }}
+                />
+              </div>
             )}
           </div>
           <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
@@ -1564,7 +1700,7 @@ export default function BasePage() {
             <Search className="h-4 w-4" />
           </button>
           {isSearchModalOpen && (
-            <div className="absolute top-full right-0 z-50 mt-1 w-96 rounded-md border border-gray-200 bg-gray-50 shadow-md">
+            <div ref={searchModalRef} className="absolute top-full right-0 z-50 mt-1 w-96 rounded-md border border-gray-200 bg-gray-50 shadow-md">
               <div className="flex items-center justify-between p-3">
                 <div className="flex-1">
                   <input
@@ -1699,7 +1835,7 @@ export default function BasePage() {
                         {isAddingColumn ? "..." : "+"}
                       </button>
                       {isFieldModalOpen && (
-                        <div className="absolute z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
+                        <div ref={addFieldModalRef} className="absolute z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
                           <input
                             type="text"
                             placeholder="Field name"
@@ -1781,7 +1917,7 @@ export default function BasePage() {
               </div>
 
               {/* Loading indicator for pagination */}
-              {isLoadingMore && (
+              {showLoading && (
                 <div className="sticky bottom-0 flex w-full items-center justify-center bg-white/80 py-2 shadow-md">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin text-gray-400" />
                   <span className="text-sm text-gray-500">
@@ -1795,50 +1931,55 @@ export default function BasePage() {
       </div>
 
       {/* Footer with Add Record buttons */}
-      <div className="flex items-center gap-6 border-t bg-white px-4 py-2 text-sm">
-        <button
-          className="cursor-pointer text-blue-600 hover:underline"
-          onClick={createRowHandler}
-          disabled={isSaving}
-        >
-          + Add record
-        </button>
-        <button
-          onClick={() => handleAddFakeRecords(100000)}
-          className="text-blue-600 hover:underline"
-          disabled={isSaving || isAddingBulkRows}
-        >
-          {isAddingBulkRows
-            ? `Adding rows... ${Math.round(
-                (bulkRowProgress.current / bulkRowProgress.total) * 100
-              )}%`
-            : "Add 100000 rows"}
-        </button>
-        {isAddingBulkRows && (
-          <div className="ml-2 flex items-center">
-            <div className="h-2 w-32 rounded-full bg-gray-200">
-              <div
-                className="h-2 rounded-full bg-blue-600"
-                style={{
-                  width: `${Math.round(
-                    (bulkRowProgress.current / bulkRowProgress.total) * 100
-                  )}%`,
-                }}
-              ></div>
+      <div className="flex items-center justify-between border-t border-gray-300 bg-white px-4 py-2 text-sm">
+        <div className="flex items-center gap-6">
+          <button
+            className="cursor-pointer text-blue-600 hover:underline"
+            onClick={createRowHandler}
+            disabled={isSaving}
+          >
+            + Add record
+          </button>
+          <button
+            onClick={() => handleAddFakeRecords(100000)}
+            className="text-blue-600 hover:underline"
+            disabled={isSaving || isAddingBulkRows}
+          >
+            {isAddingBulkRows
+              ? `Adding rows... ${Math.round(
+                  (bulkRowProgress.current / bulkRowProgress.total) * 100
+                )}%`
+              : "Add 100000 rows"}
+          </button>
+          {isAddingBulkRows && (
+            <div className="ml-2 flex items-center">
+              <div className="h-2 w-32 rounded-full bg-gray-200">
+                <div
+                  className="h-2 rounded-full bg-blue-600"
+                  style={{
+                    width: `${Math.round(
+                      (bulkRowProgress.current / bulkRowProgress.total) * 100
+                    )}%`,
+                  }}
+                ></div>
+              </div>
+              <span className="ml-2 text-xs text-gray-500">
+                {bulkRowProgress.current.toLocaleString()} /{" "}
+                {bulkRowProgress.total.toLocaleString()}
+              </span>
+              <button
+                onClick={cancelBulkRowAddition}
+                className="ml-2 rounded-full bg-red-100 p-1 text-red-600 hover:bg-red-200"
+                title="Cancel adding rows"
+              >
+                <X size={14} />
+              </button>
             </div>
-            <span className="ml-2 text-xs text-gray-500">
-              {bulkRowProgress.current.toLocaleString()} /{" "}
-              {bulkRowProgress.total.toLocaleString()}
-            </span>
-            <button
-              onClick={cancelBulkRowAddition}
-              className="ml-2 rounded-full bg-red-100 p-1 text-red-600 hover:bg-red-200"
-              title="Cancel adding rows"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        )}
+          )}
+        </div>
+        <span className="">
+          {tableData?.pages[0]?.totalCount?.toLocaleString() ?? 0} record{tableData?.pages[0]?.totalCount !== 1 ? 's' : ''}
+        </span>
       </div>
     </div>
   );

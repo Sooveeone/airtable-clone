@@ -103,7 +103,7 @@ export const tableRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      const { tableId, searchQuery, limit = 50, cursor, filter, sort } = input;
+      const { tableId, searchQuery, limit = 100, cursor, filter, sort } = input;
 
       const columns = await ctx.db.column.findMany({
         where: { tableId },
@@ -346,10 +346,60 @@ export const tableRouter = createTRPCRouter({
 
       const currentPageRows = hasNextPage ? rows.slice(0, -1) : rows;
 
+      // Get total count with the same filters
+      const totalCount = await ctx.db.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM "Row"
+        WHERE "tableId" = ${tableId}
+        ${
+          searchQuery
+            ? PrismaNamespace.sql`AND (${PrismaNamespace.join(
+                columns.map(
+                  (col) =>
+                    PrismaNamespace.sql`CAST(data->>${
+                      col.name
+                    } AS TEXT) ILIKE ${"%" + searchQuery + "%"}`
+                ),
+                " OR "
+              )})`
+            : PrismaNamespace.empty
+        }
+        ${
+          filter
+            ? PrismaNamespace.sql`AND ${
+                filter.operator === "isEmpty"
+                  ? PrismaNamespace.sql`data->>${filter.columnName} IS NULL`
+                  : filter.operator === "isNotEmpty"
+                  ? PrismaNamespace.sql`data->>${filter.columnName} IS NOT NULL`
+                  : filter.operator === "contains"
+                  ? PrismaNamespace.sql`CAST(data->>${
+                      filter.columnName
+                    } AS TEXT) ILIKE ${"%" + filter.value + "%"}`
+                  : filter.operator === "notContains"
+                  ? PrismaNamespace.sql`CAST(data->>${
+                      filter.columnName
+                    } AS TEXT) NOT ILIKE ${"%" + filter.value + "%"}`
+                  : filter.operator === "equals"
+                  ? PrismaNamespace.sql`data->>${filter.columnName} = ${String(
+                      filter.value
+                    )}`
+                  : filter.operator === "greaterThan"
+                  ? PrismaNamespace.sql`CAST(data->>${
+                      filter.columnName
+                    } AS NUMERIC) > ${Number(filter.value)}`
+                  : filter.operator === "lessThan"
+                  ? PrismaNamespace.sql`CAST(data->>${
+                      filter.columnName
+                    } AS NUMERIC) < ${Number(filter.value)}`
+                  : PrismaNamespace.empty
+              }`
+            : PrismaNamespace.empty
+        }`;
+
       return {
         columns,
         rows: currentPageRows,
         nextCursor,
+        totalCount: Number(totalCount[0].count),
       };
     }),
 
