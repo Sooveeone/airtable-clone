@@ -103,7 +103,7 @@ export const tableRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      const { tableId, searchQuery, limit = 150, cursor, filter, sort } = input;
+      const { tableId, searchQuery, limit = 100, cursor, filter, sort } = input;
 
       const columns = await ctx.db.column.findMany({
         where: { tableId },
