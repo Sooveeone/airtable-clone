@@ -5,12 +5,15 @@ import { TRPCError } from "@trpc/server";
 
 // Removed unused JsonData type definition
 
-type CursorData = {
+// Define cursor type used for pagination
+type CursorType = {
+  id?: string;
+  order?: number;
   value?: number | null;
   textValue?: string;
   isNumeric?: boolean;
-  order: number;
-  id: string;
+  isEmptyOrNull?: boolean;
+  includeEmptyValues?: boolean;
 };
 
 export const tableRouter = createTRPCRouter({
@@ -78,7 +81,7 @@ export const tableRouter = createTRPCRouter({
         tableId: z.string(),
         searchQuery: z.string().optional(),
         limit: z.number().optional(),
-        cursor: z.string().optional(), // This will now be a JSON string containing sort value and row ID
+          cursor: z.string().optional(), // This will be a JSON string containing all cursor information
         filter: z
           .object({
             columnName: z.string(),
@@ -105,11 +108,13 @@ export const tableRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const { tableId, searchQuery, limit = 150, cursor, filter, sort } = input;
 
+        // Get columns for the table
       const columns = await ctx.db.column.findMany({
         where: { tableId },
         orderBy: { order: "asc" },
       });
 
+        // Define the Row type
       type Row = {
         id: string;
         tableId: string;
@@ -118,288 +123,357 @@ export const tableRouter = createTRPCRouter({
       };
 
       // Parse the cursor if provided
-      let cursorData: CursorData | null = null;
+      let cursorData: CursorType | null = null;
+
       if (cursor) {
         try {
-          const parsed = JSON.parse(cursor) as CursorData;
-          if (
-            typeof parsed.order === "number" &&
-            typeof parsed.id === "string"
-          ) {
-            cursorData = parsed;
-          }
+          // Fix unsafe assignment by explicitly typing the parsed JSON
+          const parsed = JSON.parse(cursor) as CursorType;
+          cursorData = parsed;
         } catch (e) {
-          // Invalid cursor format, will ignore
           console.error("Invalid cursor format:", e);
         }
       }
 
-      // Get rows with proper database-level sorting and keyset pagination
-      const rows = await ctx.db.$queryRaw<Row[]>`
-        SELECT * FROM "Row"
-        WHERE "tableId" = ${tableId}
-        ${
-          searchQuery
-            ? PrismaNamespace.sql`AND (${PrismaNamespace.join(
-                columns.map(
-                  (col) =>
-                    PrismaNamespace.sql`CAST(data->>${
-                      col.name
-                    } AS TEXT) ILIKE ${"%" + searchQuery + "%"}`
-                ),
-                " OR "
-              )})`
-            : PrismaNamespace.empty
+        // Build the filter conditions
+        const conditions = [];
+        
+        // Always include the tableId filter
+        conditions.push(PrismaNamespace.sql`"tableId" = ${tableId}`);
+        
+        // Add search filter if provided
+        if (searchQuery) {
+          const searchConditions = columns.map(col => 
+            PrismaNamespace.sql`CAST(data->>${col.name} AS TEXT) ILIKE ${"%" + searchQuery + "%"}`
+          );
+          conditions.push(
+            PrismaNamespace.sql`(${PrismaNamespace.join(searchConditions, " OR ")})`
+          );
         }
-        ${
-          filter
-            ? PrismaNamespace.sql`AND ${
-                filter.operator === "isEmpty"
-                  ? PrismaNamespace.sql`data->>${filter.columnName} IS NULL`
-                  : filter.operator === "isNotEmpty"
-                  ? PrismaNamespace.sql`data->>${filter.columnName} IS NOT NULL`
-                  : filter.operator === "contains"
-                  ? PrismaNamespace.sql`CAST(data->>${
-                      filter.columnName
-                    } AS TEXT) ILIKE ${"%" + filter.value + "%"}`
-                  : filter.operator === "notContains"
-                  ? PrismaNamespace.sql`CAST(data->>${
-                      filter.columnName
-                    } AS TEXT) NOT ILIKE ${"%" + filter.value + "%"}`
-                  : filter.operator === "equals"
-                  ? PrismaNamespace.sql`data->>${filter.columnName} = ${String(
-                      filter.value
-                    )}`
-                  : filter.operator === "greaterThan"
-                  ? PrismaNamespace.sql`CAST(data->>${
-                      filter.columnName
-                    } AS NUMERIC) > ${Number(filter.value)}`
-                  : filter.operator === "lessThan"
-                  ? PrismaNamespace.sql`CAST(data->>${
-                      filter.columnName
-                    } AS NUMERIC) < ${Number(filter.value)}`
-                  : PrismaNamespace.empty
-              }`
-            : PrismaNamespace.empty
+        
+        // Add column-specific filter if provided
+        if (filter) {
+          if (filter.operator === "isEmpty") {
+            conditions.push(
+              PrismaNamespace.sql`(data->>${filter.columnName} IS NULL OR data->>${filter.columnName} = '' OR data->>${filter.columnName} = 'null')`
+            );
+          } else if (filter.operator === "isNotEmpty") {
+            conditions.push(
+              PrismaNamespace.sql`(data->>${filter.columnName} IS NOT NULL AND data->>${filter.columnName} != '' AND data->>${filter.columnName} != 'null')`
+            );
+          } else if (filter.operator === "contains") {
+            conditions.push(
+              PrismaNamespace.sql`CAST(data->>${filter.columnName} AS TEXT) ILIKE ${"%" + filter.value + "%"}`
+            );
+          } else if (filter.operator === "notContains") {
+            conditions.push(
+              PrismaNamespace.sql`CAST(data->>${filter.columnName} AS TEXT) NOT ILIKE ${"%" + filter.value + "%"}`
+            );
+          } else if (filter.operator === "equals") {
+            conditions.push(
+              PrismaNamespace.sql`CAST(data->>${filter.columnName} AS TEXT) = ${String(filter.value)}`
+            );
+          } else if (filter.operator === "greaterThan") {
+            conditions.push(
+              PrismaNamespace.sql`(
+                data->>${filter.columnName} ~ '^[0-9]+$' AND 
+                CAST(data->>${filter.columnName} AS NUMERIC) > ${Number(filter.value)}
+              )`
+            );
+          } else if (filter.operator === "lessThan") {
+            conditions.push(
+              PrismaNamespace.sql`(
+                data->>${filter.columnName} ~ '^[0-9]+$' AND 
+                CAST(data->>${filter.columnName} AS NUMERIC) < ${Number(filter.value)}
+              )`
+            );
+          }
         }
-        ${
-          !sort && cursorData
-            ? PrismaNamespace.sql`AND (
+
+        // Add cursor conditions if available and applicable
+        if (cursorData && sort) {
+          const columnType = columns.find(col => col.name === sort.columnName)?.type;
+          const isNumberColumn = columnType === "number";
+          
+          // We'll use a different approach based on whether we're paginating through empty values
+          // or non-empty values
+          if (cursorData.isEmptyOrNull) {
+            // Current cursor is pointing to an empty/null value
+            // Use row order and ID for stable pagination
+            if (sort.direction === "asc") {
+              conditions.push(PrismaNamespace.sql`(
+                (NOT data ? ${sort.columnName} OR 
+                 data->>${sort.columnName} IS NULL OR 
+                 data->>${sort.columnName}::text = '' OR 
+                 data->>${sort.columnName}::text = 'null') AND
+                ("order" > ${cursorData.order ?? 0} OR 
+                 ("order" = ${cursorData.order ?? 0} AND "id" > ${cursorData.id ?? ''}))
+              )`);
+            } else {
+              conditions.push(PrismaNamespace.sql`(
+                (NOT data ? ${sort.columnName} OR 
+                 data->>${sort.columnName} IS NULL OR 
+                 data->>${sort.columnName}::text = '' OR 
+                 data->>${sort.columnName}::text = 'null') AND
+                ("order" < ${cursorData.order ?? 0} OR 
+                 ("order" = ${cursorData.order ?? 0} AND "id" < ${cursorData.id ?? ''}))
+              )`);
+            }
+          } else if (isNumberColumn && cursorData.value !== null && !Number.isNaN(cursorData.value)) {
+            // For number columns with numeric values
+            if (sort.direction === "asc") {
+              conditions.push(PrismaNamespace.sql`(
+                -- Either get non-empty values greater than current cursor
+                (
+                  data ? ${sort.columnName} AND
+                  data->>${sort.columnName} IS NOT NULL AND
+                  data->>${sort.columnName}::text != '' AND
+                  data->>${sort.columnName}::text != 'null' AND
+                  data->>${sort.columnName}::text ~ '^[0-9]+$' AND
+                  (
+                    CAST(data->>${sort.columnName} AS NUMERIC) > ${cursorData.value} OR
+                    (CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value} AND
+                     ("order" > ${cursorData.order ?? 0} OR 
+                      ("order" = ${cursorData.order ?? 0} AND "id" > ${cursorData.id ?? ''})))
+                  )
+                )
+              )`);
+            } else {
+              // For DESC sort, ensure smooth pagination through both numeric and empty values
+              // using row order as the consistent tie-breaker
+              conditions.push(PrismaNamespace.sql`(
+                -- Get non-empty numeric values smaller than current value
+                (
+                  data ? ${sort.columnName} AND
+                  data->>${sort.columnName} IS NOT NULL AND
+                  data->>${sort.columnName}::text != '' AND
+                  data->>${sort.columnName}::text != 'null' AND
+                  data->>${sort.columnName}::text ~ '^[0-9]+$' AND
+                  (
+                    -- Either a smaller number
+                    CAST(data->>${sort.columnName} AS NUMERIC) < ${cursorData.value} OR
+                    -- Or same number but later in row order
+                    (CAST(data->>${sort.columnName} AS NUMERIC) = ${cursorData.value} AND
+                     ("order" < ${cursorData.order ?? 0} OR 
+                      ("order" = ${cursorData.order ?? 0} AND "id" < ${cursorData.id ?? ''})))
+                  )
+                )
+                -- OR any empty value (which should come after all numeric values in DESC sort)
+                OR (
+                  (NOT data ? ${sort.columnName} OR
+                   data->>${sort.columnName} IS NULL OR
+                   data->>${sort.columnName}::text = '' OR
+                   data->>${sort.columnName}::text = 'null')
+                )
+              )`);
+            }
+          } else if (cursorData.textValue) {
+            // For text columns or non-numeric values
+            if (sort.direction === "asc") {
+              conditions.push(PrismaNamespace.sql`(
+                -- Either get non-empty values greater than current text value
+                (
+                  data ? ${sort.columnName} AND
+                  data->>${sort.columnName} IS NOT NULL AND
+                  data->>${sort.columnName}::text != '' AND
+                  data->>${sort.columnName}::text != 'null' AND
+                  (
+                    CAST(data->>${sort.columnName} AS TEXT) > ${cursorData.textValue} OR
+                    (CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue} AND
+                     ("order" > ${cursorData.order ?? 0} OR 
+                      ("order" = ${cursorData.order ?? 0} AND "id" > ${cursorData.id ?? ''})))
+                  )
+                )
+                -- For text columns, empty values come AFTER non-empty in ASC sort
+                ${!isNumberColumn ? PrismaNamespace.sql`
+                OR (
+                  NOT data ? ${sort.columnName} OR
+                  data->>${sort.columnName} IS NULL OR
+                  data->>${sort.columnName}::text = '' OR
+                  data->>${sort.columnName}::text = 'null'
+                )` : PrismaNamespace.sql``}
+              )`);
+            } else {
+              conditions.push(PrismaNamespace.sql`(
+                -- Get non-empty values less than current text value in DESC sort
+                (
+                  data ? ${sort.columnName} AND
+                  data->>${sort.columnName} IS NOT NULL AND
+                  data->>${sort.columnName}::text != '' AND
+                  data->>${sort.columnName}::text != 'null' AND
+                  (
+                    CAST(data->>${sort.columnName} AS TEXT) < ${cursorData.textValue} OR
+                    (CAST(data->>${sort.columnName} AS TEXT) = ${cursorData.textValue} AND
+                     ("order" < ${cursorData.order ?? 0} OR 
+                      ("order" = ${cursorData.order ?? 0} AND "id" < ${cursorData.id ?? ''})))
+                  )
+                )
+              )`);
+            }
+          } else if (cursorData.order !== undefined && cursorData.id !== undefined) {
+            // Fallback to row order and ID if no other cursor info is available
+            if (sort.direction === "asc") {
+              conditions.push(PrismaNamespace.sql`(
                 "order" > ${cursorData.order} OR 
                 ("order" = ${cursorData.order} AND "id" > ${cursorData.id})
-              )`
-            : PrismaNamespace.empty
+              )`);
+            } else {
+              conditions.push(PrismaNamespace.sql`(
+                "order" < ${cursorData.order} OR 
+                ("order" = ${cursorData.order} AND "id" < ${cursorData.id})
+              )`);
+            }
+          }
+        } else if (cursorData?.order !== undefined && cursorData?.id !== undefined) {
+          // If we have no sort but have a cursor with order and ID
+          conditions.push(PrismaNamespace.sql`(
+            "order" > ${cursorData.order} OR 
+            ("order" = ${cursorData.order} AND "id" > ${cursorData.id})
+          )`);
         }
-        ${
-          sort && cursorData
-            ? PrismaNamespace.sql`AND (
-                ${
-                  sort.direction === "asc"
-                    ? PrismaNamespace.sql`
-                        (
-                          (
-                            data->>${sort.columnName} ~ '^[0-9]+$' AND 
-                            CAST(data->>${sort.columnName} AS NUMERIC) > ${
-                        cursorData.value ?? 0
-                      }
-                          ) OR
-                          (
-                            (data->>${
-                              sort.columnName
-                            } !~ '^[0-9]+$' OR data->>${
-                        sort.columnName
-                      } IS NULL) AND
-                            ${cursorData.isNumeric ?? false}
-                          ) OR
-                          (
-                            data->>${sort.columnName} !~ '^[0-9]+$' AND 
-                            data->>${sort.columnName} IS NOT NULL AND
-                            NOT ${cursorData.isNumeric ?? false} AND
-                            CAST(data->>${sort.columnName} AS TEXT) > ${
-                        cursorData.textValue ?? ""
-                      }
-                          )
-                        ) OR (
-                          (
-                            (data->>${
-                              sort.columnName
-                            } ~ '^[0-9]+$' AND CAST(data->>${
-                        sort.columnName
-                      } AS NUMERIC) = ${cursorData.value ?? 0}) OR
-                            (data->>${
-                              sort.columnName
-                            } !~ '^[0-9]+$' AND data->>${
-                        sort.columnName
-                      } IS NOT NULL AND CAST(data->>${
-                        sort.columnName
-                      } AS TEXT) = ${cursorData.textValue ?? ""})
-                          ) AND
-                          ("order" > ${cursorData.order} OR ("order" = ${
-                        cursorData.order
-                      } AND "id" > ${cursorData.id}))
-                        )
-                      `
-                    : PrismaNamespace.sql`
-                        (
-                          (
-                            data->>${sort.columnName} ~ '^[0-9]+$' AND 
-                            CAST(data->>${sort.columnName} AS NUMERIC) < ${
-                        cursorData.value ?? 0
-                      }
-                          ) OR
-                          (
-                            (data->>${
-                              sort.columnName
-                            } !~ '^[0-9]+$' OR data->>${
-                        sort.columnName
-                      } IS NULL) AND
-                            NOT ${cursorData.isNumeric ?? false}
-                          ) OR
-                          (
-                            data->>${sort.columnName} !~ '^[0-9]+$' AND 
-                            data->>${sort.columnName} IS NOT NULL AND
-                            ${cursorData.isNumeric ?? false} AND
-                            CAST(data->>${sort.columnName} AS TEXT) < ${
-                        cursorData.textValue ?? ""
-                      }
-                          )
-                        ) OR (
-                          (
-                            (data->>${
-                              sort.columnName
-                            } ~ '^[0-9]+$' AND CAST(data->>${
-                        sort.columnName
-                      } AS NUMERIC) = ${cursorData.value ?? 0}) OR
-                            (data->>${
-                              sort.columnName
-                            } !~ '^[0-9]+$' AND data->>${
-                        sort.columnName
-                      } IS NOT NULL AND CAST(data->>${
-                        sort.columnName
-                      } AS TEXT) = ${cursorData.textValue ?? ""})
-                          ) AND
-                          ("order" < ${cursorData.order} OR ("order" = ${
-                        cursorData.order
-                      } AND "id" < ${cursorData.id}))
-                        )
-                      `
-                }
-              )`
-            : PrismaNamespace.empty
-        }
-        ORDER BY
-        ${
-          sort
-            ? PrismaNamespace.sql`
-                CASE 
-                  WHEN data->>${sort.columnName} ~ '^[0-9]+$' 
-                  THEN CAST(data->>${sort.columnName} AS NUMERIC)
-                  ELSE NULL 
-                END ${
-                  sort.direction === "asc"
-                    ? PrismaNamespace.sql`ASC`
-                    : PrismaNamespace.sql`DESC`
-                } NULLS LAST,
-                CAST(data->>${sort.columnName} AS TEXT) ${
-                sort.direction === "asc"
-                  ? PrismaNamespace.sql`ASC`
-                  : PrismaNamespace.sql`DESC`
-              } NULLS LAST,
-                "order" ASC,
-                "id" ASC
-              `
-            : PrismaNamespace.sql`"order" ASC, "id" ASC`
-        }
-        LIMIT ${limit + 1}
-      `;
 
+        // Combine all filter conditions with AND
+        const whereClause = PrismaNamespace.join(conditions, " AND ");
+
+        // Execute count query with the same filters
+        const countResult = await ctx.db.$queryRaw<[{ count: bigint }]>`
+          SELECT COUNT(*) as count 
+          FROM "Row"
+          WHERE ${whereClause}
+        `;
+        
+        const totalCount = Number(countResult[0].count);
+        
+        // Build the ORDER BY clause
+        let orderByClause;
+        if (sort) {
+          const columnType = columns.find(col => col.name === sort.columnName)?.type;
+          const isNumberColumn = columnType === "number";
+          
+          // Use a simplified ORDER BY clause that correctly handles nulls and empty values
+          orderByClause = PrismaNamespace.sql`
+            -- First determine if the value exists and is not null/empty
+            CASE 
+              WHEN data ? ${sort.columnName} AND 
+                   data->>${sort.columnName} IS NOT NULL AND 
+                   data->>${sort.columnName}::text != '' AND 
+                   data->>${sort.columnName}::text != 'null' AND
+                   data->>${sort.columnName}::text ~ '^[0-9]+$' AND
+                   ${isNumberColumn}
+              THEN 1 
+              ELSE 0 
+            END ${sort.direction === "asc" ? PrismaNamespace.sql`ASC` : PrismaNamespace.sql`DESC`},
+            
+            -- Then sort by the actual numeric value for number columns
+            CASE 
+              WHEN data ? ${sort.columnName} AND 
+                   data->>${sort.columnName} IS NOT NULL AND 
+                   data->>${sort.columnName}::text != '' AND 
+                   data->>${sort.columnName}::text != 'null' AND
+                   data->>${sort.columnName}::text ~ '^[0-9]+$' AND
+                   ${isNumberColumn}
+              THEN CAST(data->>${sort.columnName} AS NUMERIC)
+              ELSE NULL 
+            END ${sort.direction === "asc" ? PrismaNamespace.sql`ASC` : PrismaNamespace.sql`DESC`} NULLS LAST,
+            
+            -- Then by text value for text columns
+            CASE 
+              WHEN data ? ${sort.columnName} AND 
+                   data->>${sort.columnName} IS NOT NULL AND 
+                   data->>${sort.columnName}::text != '' AND 
+                   data->>${sort.columnName}::text != 'null' AND
+                   NOT ${isNumberColumn}
+              THEN CAST(data->>${sort.columnName} AS TEXT)
+              ELSE NULL 
+            END ${sort.direction === "asc" ? PrismaNamespace.sql`ASC` : PrismaNamespace.sql`DESC`} NULLS LAST,
+            
+            -- Finally by row order and id for stable sorting
+            "order" ${sort.direction === "asc" ? PrismaNamespace.sql`ASC` : PrismaNamespace.sql`DESC`},
+            "id" ${sort.direction === "asc" ? PrismaNamespace.sql`ASC` : PrismaNamespace.sql`DESC`}
+          `;
+        } else {
+          orderByClause = PrismaNamespace.sql`"order" ASC, "id" ASC`;
+        }
+
+        // Execute the main query with LIMIT for pagination
+        const rows = await ctx.db.$queryRaw<Row[]>`
+          WITH filtered_rows AS (
+            SELECT * 
+            FROM "Row"
+            WHERE ${whereClause}
+          )
+          SELECT *
+          FROM filtered_rows
+          ORDER BY ${orderByClause}
+          LIMIT ${limit + 1}
+        `;
+
+        // Check if there are more results
       const hasNextPage = rows.length > limit;
-      const lastRow = hasNextPage ? rows[limit - 1] : null;
+        const items = hasNextPage ? rows.slice(0, limit) : rows;
 
-      // Create a new cursor that contains both the sort value and row ID
+        // Generate the next cursor based on the last row
       let nextCursor = null;
+        if (hasNextPage && items.length > 0) {
+          const lastRow = items[items.length - 1];
+          
       if (lastRow && sort) {
         const sortValue = lastRow.data[sort.columnName];
-        const isNumeric =
-          typeof sortValue === "number" ||
-          (typeof sortValue === "string" && /^[0-9]+$/.test(sortValue));
+        const columnType = columns.find(col => col.name === sort.columnName)?.type;
+        const isNumberColumn = columnType === "number";
+        
+        // Check if value is empty in any form
+        const isEmptyOrNull = 
+          !lastRow.data.hasOwnProperty(sort.columnName) ||
+          sortValue === null || 
+          sortValue === undefined || 
+          sortValue === "" || 
+          sortValue === "null";
+              
+        if (isEmptyOrNull) {
+          // For empty/null values, use row order and ID
+          nextCursor = JSON.stringify({
+            isEmptyOrNull: true,
+            order: lastRow.order,
+            id: lastRow.id
+          });
+        } else {
+          // For non-empty values, include the sort value
+          const isNumeric = isNumberColumn && (
+            typeof sortValue === "number" ||
+            (typeof sortValue === "string" && /^[0-9]+$/.test(sortValue))
+          );
 
-        nextCursor = JSON.stringify({
-          value: isNumeric ? Number(sortValue) : null,
-          textValue:
-            typeof sortValue === "string"
-              ? sortValue
+          // Get numeric value if applicable
+          const numValue = isNumeric ? Number(sortValue) : null;
+
+          // For non-empty values
+          nextCursor = JSON.stringify({
+            isEmptyOrNull: false,
+            value: numValue,
+            textValue: typeof sortValue === "string" 
+              ? sortValue 
               : typeof sortValue === "number"
-              ? String(sortValue)
-              : "",
-          isNumeric,
-          order: lastRow.order,
-          id: lastRow.id,
-        });
+                ? String(sortValue)
+                : "", 
+            order: lastRow.order,
+            id: lastRow.id
+          });
+        }
       } else if (lastRow) {
-        // If there's no sort, use row order
+        // If there's no sort, just use row order and ID
         nextCursor = JSON.stringify({
           order: lastRow.order,
-          id: lastRow.id,
+          id: lastRow.id
         });
       }
-
-      const currentPageRows = hasNextPage ? rows.slice(0, -1) : rows;
-
-      // Get total count with the same filters
-      const totalCount = await ctx.db.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(*) as count FROM "Row"
-        WHERE "tableId" = ${tableId}
-        ${
-          searchQuery
-            ? PrismaNamespace.sql`AND (${PrismaNamespace.join(
-                columns.map(
-                  (col) =>
-                    PrismaNamespace.sql`CAST(data->>${
-                      col.name
-                    } AS TEXT) ILIKE ${"%" + searchQuery + "%"}`
-                ),
-                " OR "
-              )})`
-            : PrismaNamespace.empty
-        }
-        ${
-          filter
-            ? PrismaNamespace.sql`AND ${
-                filter.operator === "isEmpty"
-                  ? PrismaNamespace.sql`data->>${filter.columnName} IS NULL`
-                  : filter.operator === "isNotEmpty"
-                  ? PrismaNamespace.sql`data->>${filter.columnName} IS NOT NULL`
-                  : filter.operator === "contains"
-                  ? PrismaNamespace.sql`CAST(data->>${
-                      filter.columnName
-                    } AS TEXT) ILIKE ${"%" + filter.value + "%"}`
-                  : filter.operator === "notContains"
-                  ? PrismaNamespace.sql`CAST(data->>${
-                      filter.columnName
-                    } AS TEXT) NOT ILIKE ${"%" + filter.value + "%"}`
-                  : filter.operator === "equals"
-                  ? PrismaNamespace.sql`data->>${filter.columnName} = ${String(
-                      filter.value
-                    )}`
-                  : filter.operator === "greaterThan"
-                  ? PrismaNamespace.sql`CAST(data->>${
-                      filter.columnName
-                    } AS NUMERIC) > ${Number(filter.value)}`
-                  : filter.operator === "lessThan"
-                  ? PrismaNamespace.sql`CAST(data->>${
-                      filter.columnName
-                    } AS NUMERIC) < ${Number(filter.value)}`
-                  : PrismaNamespace.empty
-              }`
-            : PrismaNamespace.empty
-        }`;
+    }
 
       return {
         columns,
-        rows: currentPageRows,
+          rows: items,
         nextCursor,
-        totalCount: Number(totalCount[0].count),
+          totalCount,
       };
     }),
 
@@ -509,30 +583,22 @@ export const tableRouter = createTRPCRouter({
         },
       });
 
-      // Initialize this column for all existing rows
-      const existingRows = await ctx.db.row.findMany({
-        where: {
-          tableId: input.tableId,
-        },
-      });
-
-      // Update each row to add the new column with a default value
-
-      for (const row of existingRows) {
-        const currentData = row.data as Prisma.JsonObject;
-        const defaultValue = input.type === "number" ? null : "";
-        const updatedData = {
-          ...currentData,
-          [input.name]: defaultValue,
-        } as Prisma.InputJsonValue;
-
-        await ctx.db.row.update({
-          where: { id: row.id },
-          data: {
-            data: updatedData,
-            order: row.order, // explicitly preserve the row's order
-          },
-        });
+        // Initialize this column for all existing rows using raw SQL for better performance
+        // Different handling based on column type
+        if (input.type === "number") {
+          // For number columns, we need to use NULL::jsonb to properly handle the type
+          await ctx.db.$executeRaw`
+            UPDATE "Row" 
+            SET "data" = "data" || jsonb_build_object(${input.name}, NULL::jsonb)
+            WHERE "tableId" = ${input.tableId}
+          `;
+        } else {
+          // For text columns, we use an empty string
+          await ctx.db.$executeRaw`
+            UPDATE "Row" 
+            SET "data" = "data" || jsonb_build_object(${input.name}, '')
+            WHERE "tableId" = ${input.tableId}
+          `;
       }
 
       return column;
@@ -560,28 +626,19 @@ export const tableRouter = createTRPCRouter({
         });
       }
 
+        // Delete the column definition first
       await ctx.db.column.delete({
         where: {
           id: column.id,
         },
       });
 
-      const rows = await ctx.db.row.findMany({
-        where: { tableId: input.tableId },
-      });
-
-      for (const row of rows) {
-        const data = row.data as Prisma.JsonObject;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { [input.columnName]: removed, ...newData } = data;
-
-        await ctx.db.row.update({
-          where: { id: row.id },
-          data: {
-            data: newData as Prisma.InputJsonValue,
-          },
-        });
-      }
+        // Use raw SQL to remove the column from all rows at once
+        await ctx.db.$executeRaw`
+          UPDATE "Row"
+          SET "data" = "data" - ${input.columnName}
+          WHERE "tableId" = ${input.tableId}
+        `;
 
       return { success: true };
     }),

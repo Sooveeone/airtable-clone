@@ -44,7 +44,6 @@ import { FilterPopover } from "./FilterPopover";
 import { SortPopover } from "./SortPopover";
 import { HideFieldsPopover } from "./HideFieldsPopover";
 import { ViewsSidebar } from "./ViewsSidebar";
-import { useOnClickOutside } from 'usehooks-ts';
 
 // Client-side only UserButton wrapper
 import dynamic from "next/dynamic";
@@ -464,7 +463,6 @@ export default function BasePage() {
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isSortModalOpen, setIsSortModalOpen] = useState(false);
@@ -958,7 +956,6 @@ export default function BasePage() {
       dataRef.current = formattedData;
 
       setIsInitialLoading(false);
-      setIsLoadingMore(false);
       isLoadingMoreRef.current = false;
     }
   }, [tableData]);
