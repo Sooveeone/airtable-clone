@@ -1,7 +1,10 @@
 "use client";
 
+// React hooks for state management and UI interactions
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+// Next.js navigation hooks
 import { useParams } from "next/navigation";
+// TanStack Table imports for data table functionality
 import {
   useReactTable,
   getCoreRowModel,
@@ -10,26 +13,30 @@ import {
   type CellContext,
   type Row,
 } from "@tanstack/react-table";
+// TRPC API client for backend communication
 import { api } from "@/trpc/react";
+// TanStack virtualization for efficient rendering of large datasets
 import { useVirtualizer } from "@tanstack/react-virtual";
+// UI components from Lucide
 import { Loader2 } from "lucide-react";
+// Faker library for generating test data
 import { faker } from "@faker-js/faker";
 
-// Import types
+// Import types for type-safety throughout the application
 import type { 
-  RecordRow, 
-  ColumnValue, 
-  ColumnMeta,
-  FilterType,
-  SortType,
-  TableColumn
+  RecordRow,      // Type for a row in the table
+  ColumnValue,    // Type for column values
+  ColumnMeta,     // Type for column metadata
+  FilterType,     // Type for filter configuration
+  SortType,       // Type for sort configuration
+  TableColumn     // Type for table column definition
 } from "./types";
 
-// Import utils and hooks
+// Import utility functions and hooks
 import { generateFakeRecord, defaultColumnsKeys } from "./utils";
 import { useDelayedLoading, useOutsideClick } from "./hooks";
 
-// Import components
+// Import UI components for the table and related interfaces
 import { TopNavigation } from "./components/TopNavigation";
 import { TableHeader } from "./components/TableHeader";
 import { TableToolbar } from "./components/TableToolbar";
@@ -45,46 +52,61 @@ import { ViewsSidebar } from "./ViewsSidebar";
 // -------------------------------------------------------------------------
 
 // -------------------------------------------------------------------------
-// BasePage Component
+// BasePage Component - Main component for the Airtable clone base page
 // -------------------------------------------------------------------------
 export default function BasePage() {
+  // Get baseId from URL parameters
   const { baseId } = useParams();
   
   // All state declarations
-  const [data, setData] = useState<RecordRow[]>([]);
+  // ---------------------
+  // Core table data
+  const [data, setData] = useState<RecordRow[]>([]); // Holds the table rows data
   const [selectedCell, setSelectedCell] = useState<{
     rowIndex: number;
     columnId: string;
-  } | null>(null);
-  const [tableId, setTableId] = useState<string | null>(null);
-  const [activeViewId, setActiveViewId] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isAddingColumn, setIsAddingColumn] = useState(false);
-  const [isAddTableMenuOpen, setIsAddTableMenuOpen] = useState(false);
-  const [isViewsSidebarOpen, setIsViewsSidebarOpen] = useState(false);
-  const [isViewSettingsUpdating, setIsViewSettingsUpdating] = useState(false);
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
-  const [isFieldModalOpen, setIsFieldModalOpen] = useState(false);
-  const [isHideFieldsOpen, setIsHideFieldsOpen] = useState(false);
-  const [isAddingBulkRows, setIsAddingBulkRows] = useState(false);
+  } | null>(null); // Tracks the currently selected cell for editing
+  const [tableId, setTableId] = useState<string | null>(null); // Current active table ID
+  const [activeViewId, setActiveViewId] = useState<string | null>(null); // Current active view ID
+  
+  // UI state flags
+  const [isSaving, setIsSaving] = useState(false); // Indicates if data is being saved
+  const [isAddingColumn, setIsAddingColumn] = useState(false); // Flag for column addition in progress
+  const [isAddTableMenuOpen, setIsAddTableMenuOpen] = useState(false); // Controls table creation menu visibility
+  const [isViewsSidebarOpen, setIsViewsSidebarOpen] = useState(false); // Controls views sidebar visibility
+  const [isViewSettingsUpdating, setIsViewSettingsUpdating] = useState(false); // Flag for view settings update in progress
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false); // Controls search modal visibility
+  const [searchQuery, setSearchQuery] = useState(""); // Current search term
+  const [isInitialLoading, setIsInitialLoading] = useState(true); // Flag for initial data loading
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set()); // Set of hidden column names
+  
+  // Modal visibility states
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false); // Controls filter modal visibility
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false); // Controls sort modal visibility
+  const [isFieldModalOpen, setIsFieldModalOpen] = useState(false); // Controls field addition modal visibility
+  const [isHideFieldsOpen, setIsHideFieldsOpen] = useState(false); // Controls field hiding options visibility
+  
+  // Bulk operations state
+  const [isAddingBulkRows, setIsAddingBulkRows] = useState(false); // Flag for bulk row addition in progress
   const [bulkRowProgress, setBulkRowProgress] = useState({
     current: 0,
     total: 0,
-  });
-  const [newFieldName, setNewFieldName] = useState("");
-  const [newFieldType, setNewFieldType] = useState<"text" | "number">("text");
+  }); // Tracks progress of bulk row addition
+  
+  // New field attributes
+  const [newFieldName, setNewFieldName] = useState(""); // Name for new field being created
+  const [newFieldType, setNewFieldType] = useState<"text" | "number">("text"); // Type for new field
 
   // All refs
-  const parentRef = useRef<HTMLDivElement>(null);
-  const initialTableCreationAttempted = useRef(false);
-  const editedCellsRef = useRef<Map<string, { value: string | number | null }>>(new Map());
-  const shouldCancelBulkRowsRef = useRef(false);
-  const lastUpdateRef = useRef<string | null>(null);
+  // --------
+  // DOM element refs for virtualization and UI interaction
+  const parentRef = useRef<HTMLDivElement>(null); // Reference to the table container
+  const initialTableCreationAttempted = useRef(false); // Tracks if initial table creation was attempted
+  const editedCellsRef = useRef<Map<string, { value: string | number | null }>>(new Map()); // Stores edited cells before saving
+  const shouldCancelBulkRowsRef = useRef(false); // Flag to cancel bulk row creation
+  const lastUpdateRef = useRef<string | null>(null); // Tracks last update hash to prevent duplicate updates
+  
+  // Refs for popovers and modals
   const searchModalRef = useRef<HTMLDivElement>(null);
   const filterPopoverRef = useRef<HTMLDivElement>(null);
   const sortPopoverRef = useRef<HTMLDivElement>(null);
@@ -98,63 +120,68 @@ export default function BasePage() {
   useOutsideClick(() => setIsHideFieldsOpen(false), [hideFieldsRef as React.RefObject<Element>]);
   useOutsideClick(() => setIsSearchModalOpen(false), [searchModalRef as React.RefObject<Element>]);
   
-  // Track if we're in the middle of loading more data
-  const isLoadingMoreRef = useRef(false);
-  const dataRef = useRef<RecordRow[]>([]);
+  // Data loading state refs
+  const isLoadingMoreRef = useRef(false); // Tracks if more data is being loaded during infinite scroll
+  const dataRef = useRef<RecordRow[]>([]); // Ref to current data for asynchronous access
   
-  // Add a ref to track deleted row IDs
+  // Track deleted row IDs to filter them from UI immediately
   const deletedRowIdsRef = useRef<Set<string>>(new Set());
   
-  // Add state for filters and sorts
-  const [activeFilter, setActiveFilter] = useState<FilterType | undefined>(undefined);
-  const [activeSort, setActiveSort] = useState<SortType | undefined>();
+  // Table filter and sort states
+  const [activeFilter, setActiveFilter] = useState<FilterType | undefined>(undefined); // Current active filter
+  const [activeSort, setActiveSort] = useState<SortType | undefined>(); // Current active sort
   
   // -----------------------------------------------------------------------
   // Data Fetching & Table Creation
   // -----------------------------------------------------------------------
+  
+  // Fetch base details using the baseId from URL params
   const { data: base, isLoading: isBaseLoading } = api.base.getById.useQuery({
     baseId: baseId as string,
   });
 
+  // Fetch all tables belonging to this base
   const {
     data: tables,
     isLoading: isTablesLoading,
     refetch: refetchTables,
   } = api.table.getTablesForBase.useQuery(
     { baseId: baseId as string },
-    { enabled: !!baseId }
+    { enabled: !!baseId } // Only run query when baseId is available
   );
 
-  // Update view-related queries and mutations with proper typing
+  // Fetch views for the selected table
   const { data: views, refetch: refetchViews } =
     api.view.getViewsForTable.useQuery(
       { tableId: tableId ?? "" },
       {
-        enabled: !!tableId,
+        enabled: !!tableId, // Only run query when tableId is available
       }
     );
 
+  // Mutation for updating view settings (filters, sorts, hidden columns)
   const updateViewMutation = api.view.updateView.useMutation();
 
   // Create a stable callback for updating view settings
+  // This prevents unnecessary rerenders and API calls
   const updateViewSettings = useCallback(
     (viewId: string, settings: {
       filter: FilterType | null;
       sort: SortType | null;
       hiddenColumns: string[];
     }) => {
-      // Create a hash of the settings to compare
+      // Create a hash of the settings to compare with last update
       const settingsHash = JSON.stringify({
         viewId,
         ...settings
       });
 
-      // Skip if this is the same update
+      // Skip if this is the same update as last time
       if (lastUpdateRef.current === settingsHash) {
         return;
       }
 
-      // Update the view
+      // Update the view with new settings
       setIsViewSettingsUpdating(true);
       updateViewMutation.mutate(
         {
@@ -178,22 +205,26 @@ export default function BasePage() {
     [updateViewMutation, refetchViews]
   );
 
-  // Effect to handle initial view selection
+  // Effect to handle initial view selection when views are loaded
   useEffect(() => {
     const firstView = views?.[0];
     if (!activeViewId && firstView) {
       setActiveViewId(firstView.id);
       
-      // Apply the view's settings
+      // Apply the view's filter settings if available
       if (firstView.filter) {
         setActiveFilter(firstView.filter as FilterType);
       }
+      
+      // Apply the view's sort settings if available
       if (firstView.sort && typeof firstView.sort === 'object') {
         const sortData = firstView.sort as { columnName: string; direction: "asc" | "desc" };
         if (sortData.columnName && sortData.direction) {
           setActiveSort(sortData);
         }
       }
+      
+      // Apply the view's hidden columns settings if available
       if (firstView.hiddenColumns) {
         const columns = Array.isArray(firstView.hiddenColumns)
           ? firstView.hiddenColumns.filter(
@@ -205,14 +236,14 @@ export default function BasePage() {
     }
   }, [views, activeViewId]);
 
-  // Update the useEffect for view settings
+  // Effect to automatically update view settings when filter, sort, or hidden columns change
   useEffect(() => {
     if (!activeViewId || isViewSettingsUpdating) return;
 
     const currentView = views?.find((v) => v.id === activeViewId);
     if (!currentView) return;
 
-    // Get current settings, converting undefined to null for database storage
+    // Get current settings, converting undefined to null for database storage, PostgreSQL does not support undefined
     const currentSettings = {
       filter: activeFilter ?? null,
       sort: activeSort ?? null,
@@ -230,16 +261,16 @@ export default function BasePage() {
         : []
     };
 
-    // Compare settings using JSON.stringify
+    // Compare settings using JSON.stringify to detect changes
     if (JSON.stringify(currentSettings) === JSON.stringify(viewSettings)) {
       return;
     }
 
-    // Update the view settings
+    // Update the view settings if they've changed
     updateViewSettings(activeViewId, currentSettings);
   }, [activeViewId, activeFilter, activeSort, hiddenColumns, isViewSettingsUpdating, views, updateViewSettings]);
 
-  // Update handleViewSelect
+  // Handler for switching between different views
   const handleViewSelect = (viewId: string) => {
     const view = views?.find((v) => v.id === viewId);
     if (!view) return;
@@ -248,7 +279,7 @@ export default function BasePage() {
     lastUpdateRef.current = null;
     setIsViewSettingsUpdating(true);
 
-    // Batch all state updates together
+    // Batch all state updates together for better performance
     const newFilter = view.filter ? (view.filter as FilterType) : undefined;
     const newSort = view.sort ? (view.sort as SortType) : undefined;
     const newHiddenColumns = new Set(
@@ -269,6 +300,7 @@ export default function BasePage() {
     }, 100);
   };
 
+  // Query to fetch table data with infinite scrolling support
   const {
     data: tableData,
     hasNextPage,
@@ -277,21 +309,25 @@ export default function BasePage() {
     refetch,
   } = api.table.getTableData.useInfiniteQuery(
     {
+      // Input parameters
       tableId: tableId ?? "",
-      limit: 150,
-      searchQuery,
-      filter: activeFilter,
-      sort: activeSort,
+      limit: 150, // Number of rows to fetch per page
+      searchQuery,  // Current search term
+      filter: activeFilter, // Active filter settings
+      sort: activeSort, // Active sort settings
     },
     {
-      getNextPageParam: (lastPage) => lastPage.nextCursor,
-      enabled: !!tableId,
+      // Configuration options
+      getNextPageParam: (lastPage) => lastPage.nextCursor, // Get cursor for next page, last page is the last page in the paginated result set.
+      enabled: !!tableId, // Only run query when tableId is available
     }
   );
 
+  // State for table creation
   const [isCreatingTable, setIsCreatingTable] = useState(false);
   const [tableError, setTableError] = useState<string | null>(null);
 
+  // Mutation for creating a new table
   const createTableMutation = api.table.createTable.useMutation({
     onSuccess: async (newTable) => {
       setTableId(newTable.id);
@@ -307,7 +343,7 @@ export default function BasePage() {
     },
   });
 
-  // Create initial table if needed
+  // Effect to create initial table if none exists
   useEffect(() => {
     if (
       !baseId ||
@@ -327,14 +363,14 @@ export default function BasePage() {
     }
   }, [baseId, tables, isTablesLoading, createTableMutation]);
 
-  // Set initial table selection
+  // Effect to set initial table selection when tables are loaded
   useEffect(() => {
     if (tables && tables.length > 0 && !tableId && tables[0]?.id) {
       setTableId(tables[0].id);
     }
   }, [tables, tableId]);
 
-  // Add new effect to handle table switching and data refresh
+  // Effect to handle table switching and data refresh
   useEffect(() => {
     if (tableId) {
       // Reset all view-related states when switching tables
@@ -349,6 +385,7 @@ export default function BasePage() {
     }
   }, [tableId, refetch]);
 
+  // Function to create a new table
   const handleCreateNewTable = async () => {
     if (!baseId || !tables) return;
 
@@ -369,12 +406,13 @@ export default function BasePage() {
     }
   };
 
-  // Close search modal and clear search query when switching tables or views
+  // Effect to clear search when switching tables or views
   useEffect(() => {
     setIsSearchModalOpen(false);
     setSearchQuery("");
   }, [tableId, activeViewId]);
 
+  // Mutation for updating cell values
   const updateCellMutation = api.table.updateCell.useMutation({
     onSuccess: () => {
       setIsSaving(false);
@@ -385,20 +423,20 @@ export default function BasePage() {
     },
   });
 
-  // Update the useEffect that processes tableData to respect edited cells
+  // Effect to process tableData and update local state
   useEffect(() => {
     if (tableData) {
-      // Combine all rows from all pages
+      // Combine all rows from all pages of the infinite query
       const allRows = tableData.pages.flatMap((page) => page.rows);
       const formattedData = allRows
-        .filter((row) => !deletedRowIdsRef.current.has(row.id))
+        .filter((row) => !deletedRowIdsRef.current.has(row.id)) // Filter out deleted rows
         .map((row) => {
           const rowData: RecordRow = {
             id: row.id,
             ...(row.data as Record<string, string | number | null>),
           };
 
-          // Apply any pending edits to this row
+          // Apply any pending edits to this row from the editedCellsRef
           const rowId = row.id;
           if (rowId) {
             for (const [key, value] of editedCellsRef.current.entries()) {
@@ -420,6 +458,7 @@ export default function BasePage() {
       setData(formattedData);
       dataRef.current = formattedData;
 
+      // Clear loading states
       setIsInitialLoading(false);
       isLoadingMoreRef.current = false;
     }
@@ -433,6 +472,8 @@ export default function BasePage() {
   // -----------------------------------------------------------------------
   // Column & Row Mutations
   // -----------------------------------------------------------------------
+  
+  // Mutation for deleting a column
   const deleteColumnMutation = api.table.deleteColumn.useMutation({
     onSuccess: () => {
       // Refetch the table data after deleting a column
@@ -445,6 +486,7 @@ export default function BasePage() {
     },
   });
   
+  // Handler for deleting a column
   const handleDeleteColumn = useCallback(
     (name: string) => {
       if (!tableId) return;
@@ -457,7 +499,7 @@ export default function BasePage() {
     [tableId, deleteColumnMutation, refetch]
   );
 
-  // Update the deleteRowMutation to track deleted rows
+  // Mutation for deleting a row
   const deleteRowMutation = api.table.deleteRow.useMutation({
     onSuccess: (_, variables) => {
       // Add the deleted row ID to our tracking set
@@ -473,6 +515,7 @@ export default function BasePage() {
     },
   });
 
+  // Handler for deleting a row
   const handleDeleteRow = useCallback(
     (rowId: string) => {
       if (!tableId || !rowId) return;
@@ -484,16 +527,20 @@ export default function BasePage() {
   // -----------------------------------------------------------------------
   // Build Columns (Prepending the row number column)
   // -----------------------------------------------------------------------
-  // Add type for the table data
-  // Update the columns definition with proper types
+  
+  // Define table columns structure with proper typing
   const columns: AccessorKeyColumnDef<RecordRow, ColumnValue>[] =
     useMemo(() => {
+      // Return empty array if no data is available
       if (!tableData?.pages[0])
         return [] as AccessorKeyColumnDef<RecordRow, ColumnValue>[];
+      
+      // Create a special row number column as the first column
       const rowNumberColumn: AccessorKeyColumnDef<RecordRow, ColumnValue> = {
-        accessorKey: "rowNumber",
+        accessorKey: "rowNumber", // Identifier for the column
         id: "rowNumber",
         header: () => (
+          // Render a checkbox in the header for row selection
           <div className="flex h-full w-full items-center justify-center">
             <input
               type="checkbox"
@@ -501,9 +548,10 @@ export default function BasePage() {
             />
           </div>
         ),
-        size: 80,
-        enableResizing: false,
+        size: 80, // Fixed width for row number column
+        enableResizing: false, // Prevent resizing
         cell: ({ row }: { row: Row<RecordRow> }) => (
+          // Render row number and row operations
           <TableRowNumberCell
             index={row.index}
             onDeleteRow={() => handleDeleteRow(row.original.id ?? "")}
@@ -511,13 +559,17 @@ export default function BasePage() {
         ),
       };
 
+      // Get the current column definitions from the fetched data
       const currentData = tableData.pages[0];
+      
+      // Transform column definitions to TanStack Table format
       const dataColumns = (currentData.columns ?? [])
         .filter((col: TableColumn) => !hiddenColumns.has(col.name)) // Filter out hidden columns
         .map((col: TableColumn) => ({
-          accessorKey: col.name,
-          meta: { type: col.type as "text" | "number" },
+          accessorKey: col.name, // Use column name as the accessor key
+          meta: { type: col.type as "text" | "number" }, // Store column type as metadata
           header: () => (
+            // Render custom column header with delete functionality
             <TableColumnHeader
               name={col.name}
               onDelete={() => handleDeleteColumn(col.name)}
@@ -525,6 +577,7 @@ export default function BasePage() {
             />
           ),
           cell: (props: CellContext<RecordRow, ColumnValue>) => (
+            // Render cell with custom renderer that handles editing
             <TableCellRenderer
               {...props}
               keyName={col.name}
@@ -542,6 +595,8 @@ export default function BasePage() {
             />
           ),
         }));
+        
+      // Return combined array with row number column first, followed by data columns
       return [rowNumberColumn, ...(dataColumns ?? [])];
     }, [
       tableData,
@@ -557,12 +612,17 @@ export default function BasePage() {
       editedCellsRef,
       activeFilter,
       activeSort,
-      hiddenColumns, // Add hiddenColumns to dependencies
+      hiddenColumns, // Include hiddenColumns to recalculate when visibility changes
     ]);
   
+  // -----------------------------------------------------------------------
   // Row & Column Creation Mutations
+  // -----------------------------------------------------------------------
+  
+  // Mutation for creating a single row
   const createRowMutation = api.table.createRow.useMutation({
     onSuccess: (newRow) => {
+      // Add the newly created row to the local data state
       setData((prev) => [
         ...prev,
         {
@@ -573,6 +633,7 @@ export default function BasePage() {
     },
   });
 
+  // Mutation for creating a new column
   const createColumnMutation = api.table.createColumn.useMutation({
     onSuccess: (newColumn) => {
       if (tableId) {
@@ -595,13 +656,17 @@ export default function BasePage() {
     },
   });
 
+  // Handler for adding a new column
   const handleAddColumn = () => {
+    // Validate field name
     if (!newFieldName.trim()) {
       return;
     }
     if (!tableId) {
       return;
     }
+    
+    // Check if column name already exists
     const currentData = tableData?.pages[0];
     const exists = currentData?.columns?.some(
       (col: TableColumn) => col.name === newFieldName
@@ -609,6 +674,8 @@ export default function BasePage() {
     if (exists) {
       return;
     }
+    
+    // Create the new column
     setIsAddingColumn(true);
     createColumnMutation.mutate({
       tableId,
@@ -629,12 +696,16 @@ export default function BasePage() {
     });
   };
 
+  // Mutation for creating multiple rows in bulk
   const createRowsMutation = api.table.createRows.useMutation();
 
+  // Handler for creating a single row with fake data
   const createRowHandler = async () => {
     if (!tableId) return;
     if (isSaving) return;
     setIsSaving(true);
+    
+    // Create default data object with fake values for all columns
     const defaultData: Record<string, string | number | null> = {};
 
     // Get all columns except the rowNumber column
@@ -642,6 +713,7 @@ export default function BasePage() {
       (col) => col.accessorKey && col.accessorKey !== "rowNumber"
     );
 
+    // Generate fake data for each column based on its type
     dataColumns.forEach((col) => {
       if (!col.accessorKey) return;
       const key = col.accessorKey;
@@ -655,11 +727,12 @@ export default function BasePage() {
     });
 
     try {
+      // Create the row with the generated data
       await createRowMutation.mutateAsync({
         tableId,
         defaultData,
       });
-      // Just refetch to get the latest data
+      // Refetch to get the latest data
       void refetch();
     } catch (error) {
       console.error("Failed to create row:", error);
@@ -668,6 +741,7 @@ export default function BasePage() {
     }
   };
 
+  // Handler for adding multiple fake records in bulk
   const handleAddFakeRecords = async (count: number) => {
     if (!tableId) return;
     setIsSaving(true);
@@ -676,7 +750,7 @@ export default function BasePage() {
     shouldCancelBulkRowsRef.current = false;
   
     try {
-      // Find the current max order
+      // Find the current max order to append new rows at the end
       const currentData = dataRef.current;
       const lastRow = currentData[currentData.length - 1];
       let startOrder = 0;
@@ -687,20 +761,23 @@ export default function BasePage() {
         startOrder = currentData.length;
       }
       
-      // Use larger batch size
+      // Use larger batch size for better performance
       const batchSize = 5000;
       const batches = Math.ceil(count / batchSize);
       
-      // Track when to refresh data
+      // Track when to refresh data for UI updates
       let lastRefreshTime = Date.now();
       const REFRESH_INTERVAL = 2000; // Refresh every 2 seconds
       
+      // Process each batch
       for (let i = 0; i < batches; i++) {
+        // Check for cancellation request
         if (shouldCancelBulkRowsRef.current) {
           console.log("Cancelling bulk row addition");
           break;
         }
         
+        // Calculate batch size and starting order
         const batchCount = Math.min(batchSize, count - i * batchSize);
         const batchStartOrder = startOrder + i * batchSize;
         
@@ -717,14 +794,14 @@ export default function BasePage() {
             startOrder: batchStartOrder,
           });
           
-          // Update progress
+          // Update progress bar
           const newProgress = Math.min((i + 1) * batchSize, count);
           setBulkRowProgress({
             current: newProgress,
             total: count,
           });
           
-          // Check if we should refresh the data
+          // Periodically refresh the data to show progress
           const currentTime = Date.now();
           if (currentTime - lastRefreshTime >= REFRESH_INTERVAL) {
             console.log("Refreshing table data...");
@@ -741,25 +818,26 @@ export default function BasePage() {
         }
       }
       
-      // Final refresh after all batches
+      // Final refresh after all batches complete
       if (!shouldCancelBulkRowsRef.current) {
         console.log("Final refresh of table data");
         void refetch();
       }
       
     } finally {
+      // Clean up state regardless of success/failure
       setIsSaving(false);
       setIsAddingBulkRows(false);
       shouldCancelBulkRowsRef.current = false;
     }
   };
 
-  // Add a function to cancel the bulk row addition
+  // Function to cancel bulk row addition
   const cancelBulkRowAddition = () => {
     shouldCancelBulkRowsRef.current = true;
   };
   
-  // Add a function to save all pending changes before navigating away
+  // Function to save all pending cell edits before navigating away
   const saveAllPendingChanges = async () => {
     if (editedCellsRef.current.size === 0) return true;
 
@@ -792,7 +870,7 @@ export default function BasePage() {
     }
   };
 
-  // Add this handler function
+  // Handler for toggling column visibility
   const handleToggleColumn = (columnName: string) => {
     setHiddenColumns((prev) => {
       const newSet = new Set(prev);
@@ -805,25 +883,32 @@ export default function BasePage() {
     });
   };
   
+  // -----------------------------------------------------------------------
+  // Table Initialization & Virtualization
+  // -----------------------------------------------------------------------
+  
+  // Initialize the TanStack table with our data and columns
   const table = useReactTable({
-    data,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getRowId: (row) => row.id ?? faker.string.uuid(),
-    columnResizeMode: "onChange",
+    data, // The rows data
+    columns, // Column definitions
+    getCoreRowModel: getCoreRowModel(), // Basic row model processor
+    getRowId: (row) => row.id ?? faker.string.uuid(), // Unique row identifier
+    columnResizeMode: "onChange", // Allow column resizing
   });
 
-  // This is useVirtualizer from TanStack Virtual which tracks how far I scrolled and if I need to load more data
+  // Set up virtualization for efficient rendering of large data sets
+  // This only renders visible rows plus a small buffer, greatly improving performance
   const rowVirtualizer = useVirtualizer({
-    count: table.getRowModel().rows.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 35,
-    overscan: 25,
+    count: table.getRowModel().rows.length, // Total number of rows
+    getScrollElement: () => parentRef.current, // Container element to track scrolling
+    estimateSize: () => 35, // Estimated row height in pixels
+    overscan: 25, // Number of rows to render beyond visible area
     onChange: (virtualizer) => {
+      // Handle infinite scrolling - load more data when approaching the end
       const lastItem = virtualizer.getVirtualItems().slice(-1)[0];
       if (
         lastItem &&
-        lastItem.index >= data.length - 10 &&
+        lastItem.index >= data.length - 10 && // When within 10 rows of the end
         hasNextPage &&
         !isFetchingNextPage
       ) {
@@ -832,19 +917,19 @@ export default function BasePage() {
     },
   });
 
-  // Add a delayed loading state with shorter timeout
+  // Add a delayed loading state with shorter timeout for better UX
   const showLoading = useDelayedLoading(isFetchingNextPage);
   
   return (
     <div className="flex h-screen flex-col">
-      {/* Top Navigation */}
+      {/* Top Navigation - Shows base name and global actions */}
       <TopNavigation 
         baseName={base?.name ?? ""}
         isLoading={isBaseLoading}
         onSaveAllPendingChanges={saveAllPendingChanges}
       />
 
-      {/* Table Header */}
+      {/* Table Header - Shows table selector and table creation options */}
       <TableHeader
         tables={tables}
         tableId={tableId}
@@ -856,7 +941,7 @@ export default function BasePage() {
         tableError={tableError}
       />
 
-      {/* Column Toolbar */}
+      {/* Column Toolbar - Contains filtering, sorting, and column management controls */}
       <TableToolbar
         isViewsSidebarOpen={isViewsSidebarOpen}
         setIsViewsSidebarOpen={setIsViewsSidebarOpen}
@@ -885,7 +970,7 @@ export default function BasePage() {
 
       {/* Main Content Area with Views Sidebar */}
       <div className="relative flex-1 overflow-hidden">
-        {/* Views Sidebar */}
+        {/* Views Sidebar - Shows available views and allows switching between them */}
         <ViewsSidebar
           isOpen={isViewsSidebarOpen}
           tableId={tableId}
@@ -893,13 +978,14 @@ export default function BasePage() {
           onViewSelect={handleViewSelect}
         />
 
-        {/* Table Body */}
+        {/* Table Body - The main data grid */}
         <div
           className={`h-full transition-all duration-300 ease-in-out ${
             isViewsSidebarOpen ? "pl-64" : "pl-0"
           }`}
-          onClick={() => setSelectedCell(null)}
+          onClick={() => setSelectedCell(null)} // Clear cell selection on background click
         >
+          {/* Loading state for initial data fetch */}
           {isInitialLoading || isBaseLoading || isTablesLoading ? (
             <div className="flex h-full items-center justify-center">
               <Loader2 className="mr-2 h-6 w-6 animate-spin text-gray-400" />
@@ -907,15 +993,16 @@ export default function BasePage() {
             </div>
           ) : (
             <div
-              ref={parentRef}
+              ref={parentRef} // Reference for virtualization and scroll tracking
               className="h-full overflow-auto"
-              onClick={() => setSelectedCell(null)}
+              onClick={() => setSelectedCell(null)} // Clear cell selection on click
             >
-              {/* Table Container with max-width */}
+              {/* Table Container with minimum width to prevent squishing */}
               <div className="inline-block min-w-[800px]">
-                {/* Table Header Row */}
+                {/* Table Header Row - Fixed position while scrolling */}
                 <div className="sticky top-0 z-10 flex w-max bg-[#f4f4f4] text-sm text-gray-800">
                   <div className="flex">
+                    {/* Render column headers */}
                     {table.getHeaderGroups().map((headerGroup) => (
                       <div key={headerGroup.id} className="flex">
                         {headerGroup.headers.map((header) => (
@@ -928,6 +1015,7 @@ export default function BasePage() {
                             }}
                             className="border-r border-b border-gray-200 px-3 py-1 text-left"
                           >
+                            {/* Render header content using TanStack's flexRender */}
                             {flexRender(
                               header.column.columnDef.header,
                               header.getContext()
@@ -936,7 +1024,7 @@ export default function BasePage() {
                         ))}
                       </div>
                     ))}
-                    {/* Add field column with fixed width */}
+                    {/* Add field column - Button to add new columns */}
                     <div
                       className="border-b border-r border-gray-200 px-3 py-1 text-left"
                       style={{
@@ -956,6 +1044,7 @@ export default function BasePage() {
                       >
                         {isAddingColumn ? "..." : "+"}
                       </button>
+                      {/* Field addition modal */}
                       {isFieldModalOpen && (
                         <div ref={addFieldModalRef}>
                           <AddFieldModal
@@ -973,13 +1062,14 @@ export default function BasePage() {
                   </div>
                 </div>
 
-                {/* Virtualized Table Body */}
+                {/* Virtualized Table Body - Only renders visible rows */}
                 <div
                   style={{
-                    height: `${rowVirtualizer.getTotalSize()}px`,
-                    position: "relative",
+                    height: `${rowVirtualizer.getTotalSize()}px`, // Total height of all rows
+                    position: "relative", // Required for absolute positioning of rows
                   }}
                 >
+                  {/* Map over only the visible virtual rows */}
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                     const row = table.getRowModel().rows[virtualRow.index];
                     if (!row) return null;
@@ -987,13 +1077,14 @@ export default function BasePage() {
                       <div
                         key={row.id ?? virtualRow.index}
                         style={{
-                          position: "absolute",
+                          position: "absolute", // Position rows absolutely
                           top: 0,
-                          transform: `translateY(${virtualRow.start}px)`,
+                          transform: `translateY(${virtualRow.start}px)`, // Position based on scroll
                           height: "35px",
                         }}
                         className="flex border-b border-gray-200"
                       >
+                        {/* Render cells for this row */}
                         {row.getVisibleCells().map((cell) => (
                           <div
                             key={cell.id}
@@ -1004,6 +1095,7 @@ export default function BasePage() {
                             }}
                             className="border-r border-gray-200"
                           >
+                            {/* Render cell content using TanStack's flexRender */}
                             {flexRender(
                               cell.column.columnDef.cell,
                               cell.getContext()
@@ -1016,7 +1108,7 @@ export default function BasePage() {
                 </div>
               </div>
 
-              {/* Loading indicator for pagination */}
+              {/* Loading indicator for pagination during infinite scroll */}
               {showLoading && (
                 <div className="sticky bottom-0 flex w-full items-center justify-center bg-white/80 py-2 shadow-md">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin text-gray-400" />
@@ -1030,7 +1122,7 @@ export default function BasePage() {
         </div>
       </div>
 
-      {/* Footer with Add Record buttons */}
+      {/* Footer with Add Record buttons and bulk operations */}
       <TableFooter
         createRowHandler={createRowHandler}
         handleAddFakeRecords={handleAddFakeRecords}

@@ -7,5 +7,5 @@ export const config = {
     "/((?!_next|.*\\..*|favicon.ico).*)", // Protects all non-static routes
     "/(api|trpc)(.*)", // Always run for API & tRPC routes
   ],
-  publicRoutes: ["/sign-in", "/sign-up"], // ✅ Removed "/" from public routes
+  publicRoutes: ["/sign-in", "/sign-up"], // Removed "/" from public routes
 };
