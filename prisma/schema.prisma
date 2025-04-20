@@ -1,15 +1,20 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Prisma Schema for Airtable Clone
+// This file defines the database models, relationships, and configuration
 
+// Configure the Prisma client generation
 generator client {
   provider = "prisma-client-js"
 }
 
+// Configure the database connection
+// Uses PostgreSQL for powerful JSON operations and performance at scale
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+// Legacy model from T3 starter template
+// Could be removed if not needed for your application
 model Post {
   id        Int      @id @default(autoincrement())
   name      String
@@ -19,64 +24,76 @@ model Post {
   @@index([name])
 }
 
+// User model - represents a person using the application
+// Connected to Clerk for authentication via clerkId
 model User {
-  id        String   @id @default(cuid())
-  clerkId   String?  @unique // ⬅️ Temporarily optional
+  id        String   @id @default(cuid()) // Internal ID
+  clerkId   String?  @unique              // External ID from Clerk auth service
   email     String?
-  username  String?  @unique // ⬅️ Temporarily optional
+  username  String?  @unique              // Optional username for display
   firstName String?
   lastName  String?
   createdAt DateTime @default(now())
-  bases     Base[]
+  bases     Base[]                        // User can own multiple bases
 }
 
+// Base model - equivalent to an Airtable workspace/base
+// A container for related tables
 model Base {
   id        String   @id @default(uuid())
-  name      String
-  userId    String
+  name      String                        // Display name for the base
+  userId    String                        // Foreign key to user
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
-  tables    Table[]
+  user      User     @relation(fields: [userId], references: [id])  // Relationship to user owner
+  tables    Table[]                       // A base contains multiple tables
 }
 
+// Table model - represents a collection of data with columns and rows
+// Similar to an Airtable table or a spreadsheet
 model Table {
   id      String   @id @default(uuid())
-  name    String
-  baseId  String
-  base    Base     @relation(fields: [baseId], references: [id], onDelete: Cascade)
-  columns Column[]
-  rows    Row[]
-  views   View[]
+  name    String                          // Display name for the table
+  baseId  String                          // Foreign key to base
+  base    Base     @relation(fields: [baseId], references: [id], onDelete: Cascade)  // Relationship to parent base
+  columns Column[]                        // Column definitions for this table
+  rows    Row[]                           // Data rows for this table
+  views   View[]                          // Different ways to view this table's data
 }
 
+// Column model - represents a field in a table
+// Defines the structure of the data 
 model Column {
   id        String   @id @default(cuid())
-  name      String
-  type      String
-  order     Int       @default(0)
-  tableId   String
-  table   Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  name      String                        // Display name for the column
+  type      String                        // Data type: "text", "number", etc.
+  order     Int       @default(0)         // Display order of the column
+  tableId   String                        // Foreign key to table
+  table   Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)  // Relationship to parent table
 }
 
+// Row model - represents a record in a table
+// Stores actual row data in a JSON field for flexibility
 model Row {
   id      String @id @default(uuid())
-  tableId String
-  order   Int    @default(0)
-  table   Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  data    Json
+  tableId String                          // Foreign key to table
+  order   Int    @default(0)              // Display order of the row 
+  table   Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)  // Relationship to parent table
+  data    Json                            // Flexible JSON storage for cell values
 
-  @@unique([tableId, order])
+  @@unique([tableId, order])              // Ensure unique ordering within a table
 }
 
+// View model - represents a saved view configuration
+// Allows for different filtered/sorted views of the same table
 model View {
   id            String   @id @default(uuid())
-  name          String
-  type          String   @default("grid")
-  tableId       String
-  table         Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  filter        Json?
-  sort          Json?
-  hiddenColumns Json     @default("[]")
+  name          String                    // Display name for the view
+  type          String   @default("grid") // View type: "grid", etc.
+  tableId       String                    // Foreign key to table
+  table         Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)  // Relationship to parent table
+  filter        Json?                     // Saved filter configuration
+  sort          Json?                     // Saved sort configuration
+  hiddenColumns Json     @default("[]")   // Columns hidden in this view
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
