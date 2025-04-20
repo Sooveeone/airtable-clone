@@ -141,6 +141,8 @@ export function CellRenderer({
       }
     }
     setIsEditing(false);
+    // Explicitly blur the input to remove the caret
+    inputRef.current?.blur();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -148,11 +150,15 @@ export function CellRenderer({
       e.preventDefault();
       saveCell();
       setSelectedCell(null);
+      // Ensure the input is blurred
+      inputRef.current?.blur();
     } else if (e.key === "Escape") {
       e.preventDefault();
       setLocalValue(value === 0 && fieldType === "number" ? 0 : value ?? "");
       setIsEditing(false);
       setSelectedCell(null);
+      // Ensure the input is blurred
+      inputRef.current?.blur();
     } else if (!isEditing) {
       setIsEditing(true);
     }
@@ -187,6 +193,10 @@ export function CellRenderer({
             ? "bg-[#fff2ea]"
             : "bg-transparent"
         }`}
+        style={{ 
+          caretColor: isEditing ? 'auto' : 'transparent',
+          WebkitAppearance: 'none'
+        }}
         value={
           isEditing
             ? localValue === 0
@@ -206,8 +216,13 @@ export function CellRenderer({
           setLocalValue(val);
           setIsEditing(true);
         }}
-        onBlur={saveCell}
+        onBlur={() => {
+          saveCell();
+          // Additional safeguard: remove selection to prevent any visible caret
+          window.getSelection()?.removeAllRanges();
+        }}
         onKeyDown={handleKeyDown}
+        readOnly={!isEditing}
       />
     </div>
   );
