@@ -75,14 +75,14 @@ export function TableToolbar({
     <div className="flex items-center border-b border-gray-300 bg-white px-4 py-2 text-sm shadow-sm">
       <div className="flex items-center gap-1">
         <button
-          className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100"
+          className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100 cursor-pointer"
           onClick={() => setIsViewsSidebarOpen(!isViewsSidebarOpen)}
         >
           <Menu className="h-4 w-4" />
           <span>Views</span>
         </button>
         <div className="mx-1 h-4 w-px bg-gray-300" />
-        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100 cursor-pointer">
           <LayoutGrid className="h-4 w-4" />
           <span>Grid view</span>
           <SquareStack className="ml-1 h-3.5 w-3.5" />
@@ -90,7 +90,7 @@ export function TableToolbar({
         </button>
         <div className="relative">
           <button
-            className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100"
+            className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100 cursor-pointer"
             onClick={() => setIsHideFieldsOpen(!isHideFieldsOpen)}
           >
             <Eye className="h-4 w-4" />
@@ -116,7 +116,7 @@ export function TableToolbar({
         </div>
         <div className="relative">
           <button
-            className={`flex items-center gap-1.5 rounded px-2 py-1 ${
+            className={`flex items-center gap-1.5 rounded px-2 py-1 cursor-pointer ${
               activeFilter
                 ? "bg-green-100 hover:bg-green-200"
                 : "hover:bg-gray-100"
@@ -150,7 +150,7 @@ export function TableToolbar({
         </div>
         <div className="relative">
           <button
-            className={`flex items-center gap-1.5 rounded px-2 py-1 ${
+            className={`flex items-center gap-1.5 rounded px-2 py-1 cursor-pointer ${
               activeSort
                 ? "bg-[#fff2ea] hover:bg-orange-100"
                 : "hover:bg-gray-100"
@@ -180,25 +180,25 @@ export function TableToolbar({
             </div>
           )}
         </div>
-        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100 cursor-pointer">
           <FolderKanban className="h-4 w-4" />
           <span>Group</span>
         </button>
-        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100 cursor-pointer">
           <Palette className="h-4 w-4" />
           <span>Color</span>
         </button>
-        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100 cursor-pointer">
           <AlignJustify className="h-4 w-4" />
         </button>
-        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100">
+        <button className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100 cursor-pointer">
           <Share2 className="h-4 w-4" />
           <span>Share and sync</span>
         </button>
       </div>
       <div className="relative ml-auto">
         <button
-          className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100"
+          className="flex items-center gap-1.5 rounded px-2 py-1 hover:bg-gray-100 cursor-pointer"
           onClick={() => setIsSearchModalOpen(!isSearchModalOpen)}
         >
           <Search className="h-4 w-4" />

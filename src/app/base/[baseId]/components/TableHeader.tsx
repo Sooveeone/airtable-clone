@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { Plus, Loader2, ChevronDown } from "lucide-react";
 
 interface TableHeaderProps {
@@ -10,6 +9,7 @@ interface TableHeaderProps {
   handleCreateNewTable: () => void;
   isCreatingTable: boolean;
   tableError: string | null;
+  addTableButtonRef?: React.RefObject<HTMLDivElement> | null;
 }
 
 export function TableHeader({
@@ -21,8 +21,8 @@ export function TableHeader({
   handleCreateNewTable,
   isCreatingTable,
   tableError,
+  addTableButtonRef,
 }: TableHeaderProps) {
-  const addTableButtonRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="flex h-8 items-center justify-between bg-[#4c505b] px-4 text-sm">
@@ -56,11 +56,11 @@ export function TableHeader({
         </div>
         <div
           ref={addTableButtonRef}
-          className="relative flex h-full cursor-pointer items-center hover:bg-gray-700"
+          className="relative flex h-full cursor-pointer items-center group"
           onClick={() => setIsAddTableMenuOpen(!isAddTableMenuOpen)}
         >
-          <Plus size={16} className="mr-1 text-white" />
-          <span className="text-sm font-light text-gray-100">
+          <Plus size={16} className="mr-1 text-white group-hover:text-white" />
+          <span className="text-sm font-light text-gray-100 transition-colors duration-150 group-hover:text-white">
             Add or import
           </span>
           {isAddTableMenuOpen && (

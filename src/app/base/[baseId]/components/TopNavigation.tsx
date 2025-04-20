@@ -1,4 +1,4 @@
-import { ChevronDown, History, CircleHelp } from "lucide-react";
+import { ChevronDown, History, CircleHelp, Users, Bell } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -81,24 +81,11 @@ export function TopNavigation({
           </span>
         </button>
         <button className="flex cursor-pointer items-center gap-1 rounded-full bg-white px-4 py-1.5 font-light shadow-sm hover:bg-gray-50">
+          <Users className="mr-1 h-4 w-4" />
           <span>Share</span>
         </button>
-        <button className="cursor-pointer rounded-full p-1 hover:bg-gray-200">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-gray-100"
-          >
-            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
-            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
-          </svg>
+        <button className="cursor-pointer rounded-full border border-white bg-white p-1.5">
+          <Bell className="h-4 w-4 text-black" />
         </button>
         <div className="flex h-8 w-8 items-center justify-center">
           <ClientUserButton />

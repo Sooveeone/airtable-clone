@@ -125,6 +125,7 @@ export function ViewsSidebar({
   return (
     <div
       className={`absolute top-0 bottom-0 left-0 z-20 w-64 border-r border-gray-200 bg-white transition-all duration-300 ease-in-out ${
+        // If the sidebar is open, translate it to the right
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >

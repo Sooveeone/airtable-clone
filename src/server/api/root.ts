@@ -1,7 +1,7 @@
 /**
  * tRPC Root Router
  * 
- * This file defines the main API router for your application.
+ * This file defines the main API router for the application.
  * It combines all feature-specific routers into a single entrypoint
  * that the frontend will communicate with.
  */
@@ -12,7 +12,6 @@ import { usersRouter } from "./routers/users";
 import { baseRouter } from "./routers/base";
 import { tableRouter } from "./routers/table";
 import { viewRouter } from "./routers/view";
-
 /**
  * App Router Configuration
  * 
@@ -26,7 +25,7 @@ import { viewRouter } from "./routers/view";
  * - table: Tables within bases, with columns and rows
  * - view: Different views of tables (like Grid view, etc.)
  * 
- * When you add a new router in /api/routers, you must register it here
+ * When you adding a new router in /api/routers register it here
  * to make it available to the frontend.
  */
 export const appRouter = createTRPCRouter({

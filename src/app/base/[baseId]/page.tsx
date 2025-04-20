@@ -44,7 +44,7 @@ import { ColumnHeader as TableColumnHeader } from "./components/ColumnHeader";
 import { CellRenderer as TableCellRenderer } from "./components/CellRenderer";
 import { RowNumberCell as TableRowNumberCell } from "./components/RowNumberCell";
 import { TableFooter } from "./components/TableFooter";
-import { AddFieldModal } from "./components/AddFieldModal";
+// import { AddFieldModal } from "./components/AddFieldModal";
 import { ViewsSidebar } from "./ViewsSidebar";
 
 // -------------------------------------------------------------------------
@@ -96,6 +96,7 @@ export default function BasePage() {
   // New field attributes
   const [newFieldName, setNewFieldName] = useState(""); // Name for new field being created
   const [newFieldType, setNewFieldType] = useState<"text" | "number">("text"); // Type for new field
+  const [fieldError, setFieldError] = useState<string>(""); // Error message for field validation
 
   // All refs
   // --------
@@ -112,6 +113,7 @@ export default function BasePage() {
   const sortPopoverRef = useRef<HTMLDivElement>(null);
   const hideFieldsRef = useRef<HTMLDivElement>(null);
   const addFieldModalRef = useRef<HTMLDivElement>(null);
+  const addTableButtonRef = useRef<HTMLDivElement>(null); // Reference for the add table button
   
   // Add click outside handlers for the popovers
   useOutsideClick(() => setIsFieldModalOpen(false), [addFieldModalRef as React.RefObject<Element>]);
@@ -119,6 +121,7 @@ export default function BasePage() {
   useOutsideClick(() => setIsSortModalOpen(false), [sortPopoverRef as React.RefObject<Element>]);
   useOutsideClick(() => setIsHideFieldsOpen(false), [hideFieldsRef as React.RefObject<Element>]);
   useOutsideClick(() => setIsSearchModalOpen(false), [searchModalRef as React.RefObject<Element>]);
+  useOutsideClick(() => setIsAddTableMenuOpen(false), [addTableButtonRef as React.RefObject<Element>]);
   
   // Data loading state refs
   const isLoadingMoreRef = useRef(false); // Tracks if more data is being loaded during infinite scroll
@@ -658,20 +661,27 @@ export default function BasePage() {
 
   // Handler for adding a new column
   const handleAddColumn = () => {
+    // Clear previous errors
+    setFieldError("");
+    
     // Validate field name
     if (!newFieldName.trim()) {
-      return;
-    }
-    if (!tableId) {
+      setFieldError("Field name is required");
       return;
     }
     
-    // Check if column name already exists
-    const currentData = tableData?.pages[0];
-    const exists = currentData?.columns?.some(
-      (col: TableColumn) => col.name === newFieldName
+    if (!tableId) {
+      setFieldError("No active table selected");
+      return;
+    }
+    
+    // Check for duplicate column name
+    const columnExists = tableData?.pages[0]?.columns?.some(
+      (col) => col.name.toLowerCase() === newFieldName.trim().toLowerCase()
     );
-    if (exists) {
+    
+    if (columnExists) {
+      setFieldError("A column with this name already exists");
       return;
     }
     
@@ -679,7 +689,7 @@ export default function BasePage() {
     setIsAddingColumn(true);
     createColumnMutation.mutate({
       tableId,
-      name: newFieldName,
+      name: newFieldName.trim(),
       type: newFieldType,
     }, {
       onSuccess: () => {
@@ -688,9 +698,11 @@ export default function BasePage() {
         setNewFieldName("");
         setNewFieldType("text");
         setIsFieldModalOpen(false);
+        setFieldError("");
       },
       onError: (error) => {
         console.error("Failed to add column:", error);
+        setFieldError("Failed to create column");
         setIsAddingColumn(false);
       }
     });
@@ -939,6 +951,7 @@ export default function BasePage() {
         handleCreateNewTable={handleCreateNewTable}
         isCreatingTable={isCreatingTable}
         tableError={tableError}
+        addTableButtonRef={addTableButtonRef as React.RefObject<HTMLDivElement>}
       />
 
       {/* Column Toolbar - Contains filtering, sorting, and column management controls */}
@@ -981,6 +994,7 @@ export default function BasePage() {
         {/* Table Body - The main data grid */}
         <div
           className={`h-full transition-all duration-300 ease-in-out ${
+            // If the views sidebar is open, translate the table to the right
             isViewsSidebarOpen ? "pl-64" : "pl-0"
           }`}
           onClick={() => setSelectedCell(null)} // Clear cell selection on background click
@@ -1039,23 +1053,62 @@ export default function BasePage() {
                             setIsFieldModalOpen(!isFieldModalOpen);
                           }
                         }}
-                        className="flex h-full w-full items-center justify-center text-lg font-medium text-gray-600 hover:text-gray-900"
+                        className="flex h-full w-full items-center justify-center text-lg font-medium text-gray-600 hover:text-gray-900 cursor-pointer"
                         disabled={isAddingColumn}
+                        style={{ caretColor: 'transparent' }}
                       >
                         {isAddingColumn ? "..." : "+"}
                       </button>
                       {/* Field addition modal */}
                       {isFieldModalOpen && (
-                        <div ref={addFieldModalRef}>
-                          <AddFieldModal
-                            onAddField={(name, type) => {
-                              setNewFieldName(name);
-                              setNewFieldType(type);
-                              handleAddColumn();
+                        <div ref={addFieldModalRef} className="absolute z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
+                          <div className="flex justify-between mb-2">
+                            <h3 className="text-sm font-medium">Add new field</h3>
+                            <button 
+                              onClick={() => setIsFieldModalOpen(false)} 
+                              className="text-gray-500 hover:text-gray-700 cursor-pointer"
+                              type="button"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Field name"
+                            value={newFieldName}
+                            onChange={(e) => {
+                              setNewFieldName(e.target.value);
+                              // Clear error when typing
+                              setFieldError("");
                             }}
-                            isAdding={isAddingColumn}
-                            onClose={() => setIsFieldModalOpen(false)}
+                            className="mb-2 w-full rounded border px-2 py-1 text-sm"
+                            autoFocus
                           />
+                          <select
+                            value={newFieldType}
+                            onChange={(e) =>
+                              setNewFieldType(
+                                e.target.value as "text" | "number"
+                              )
+                            }
+                            className="mb-2 w-full rounded border px-2 py-1 text-sm"
+                          >
+                            <option value="text">Text</option>
+                            <option value="number">Number</option>
+                          </select>
+                          {/* Show only one error message from fieldError state */}
+                          {fieldError && (
+                            <p className="mb-2 text-xs text-red-600">
+                              {fieldError}
+                            </p>
+                          )}
+                          <button
+                            onClick={handleAddColumn}
+                            className="w-full rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-700 cursor-pointer"
+                            disabled={isAddingColumn}
+                          >
+                            {isAddingColumn ? "Adding..." : "Add Field"}
+                          </button>
                         </div>
                       )}
                     </div>
