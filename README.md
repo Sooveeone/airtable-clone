@@ -1,11 +1,12 @@
 # Airtable Clone
 
-A full-featured Airtable clone built with the **T3 Stack**, featuring real-time editing, virtualized tables, infinite scrolling, and full CRUD functionality with advanced filtering, sorting, and fast performance.
+An Airtable clone built with the **T3 Stack**, featuring real-time editing, virtualized tables, infinite scrolling, and full CRUD functionality with advanced filtering, sorting, searching and fast performance.
 
 ## 🚀 Features
 
 - 🔐 Google Auth via Clerk
 - 🧠 Smart schema with editable columns (Text, Number)
+- 𝄜 Bases and tables creation
 - 📄 Infinite scroll with virtualized rendering (TanStack React Virtual)
 - 🧮 Advanced filtering and sorting (PostgreSQL + raw SQL with Prisma)
 - 🗂️ Multiple table views per base
@@ -19,6 +20,7 @@ A full-featured Airtable clone built with the **T3 Stack**, featuring real-time 
 ## 🧰 Tech Stack (T3 Stack)
 
 - **Frontend**:
+
   - React 19 with Next.js App Router for server components and routing
   - TypeScript for type-safe code development
   - Tailwind CSS for utility-first styling
@@ -27,6 +29,7 @@ A full-featured Airtable clone built with the **T3 Stack**, featuring real-time 
   - Lucide-react for icons
 
 - **Backend**:
+
   - tRPC for end-to-end typesafe APIs
   - Prisma as the ORM for database access
   - PostgreSQL for relational database storage
@@ -34,6 +37,7 @@ A full-featured Airtable clone built with the **T3 Stack**, featuring real-time 
   - Clerk for authentication
 
 - **State Management & Data Fetching**:
+
   - TanStack Query (React Query) for server state management
   - Infinite scroll implementation for efficient data loading
 

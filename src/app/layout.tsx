@@ -9,7 +9,31 @@ import { SyncUserProvider } from "./_components/SyncUserProvider"; // User sync 
 // Define metadata for SEO and browser tab display
 export const metadata: Metadata = {
   title: "Airtable Clone",
-  description: "A simple clone of Airtable built with T3 Stack",
+  description: "An Airtable clone with real-time editing, virtualized tables, and advanced filtering",
+  applicationName: "Airtable Clone",
+  authors: [{ name: "Vitto" }],
+  generator: "Next.js",
+  keywords: ["airtable", "clone", "database", "tables", "spreadsheet", "react", "nextjs", "t3-stack"],
+  creator: "Vitto",
+  publisher: "Vitto",
+  robots: "index, follow",
+  
+  // Open Graph / Facebook
+  openGraph: {
+    type: "website",
+    title: "Airtable Clone - Built with T3 Stack",
+    description: "A full-featured Airtable clone with real-time editing and advanced data management",
+    siteName: "Airtable Clone",
+  },
+  
+  // Twitter
+  twitter: {
+    card: "summary_large_image",
+    title: "Airtable Clone - Built with T3 Stack",
+    description: "A full-featured Airtable clone with real-time editing and advanced data management",
+  },
+  
+  // Favicon
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
