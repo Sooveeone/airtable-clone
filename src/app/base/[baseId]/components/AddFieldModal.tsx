@@ -53,30 +53,30 @@ export function AddFieldModal({
         </button>
       </div>
       <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Field name"
-          value={fieldName}
-          onChange={(e) => setFieldName(e.target.value)}
-          className="mb-2 w-full rounded border px-2 py-1 text-sm"
+      <input
+        type="text"
+        placeholder="Field name"
+        value={fieldName}
+        onChange={(e) => setFieldName(e.target.value)}
+        className="mb-2 w-full rounded border px-2 py-1 text-sm"
           autoFocus
-        />
-        <select
-          value={fieldType}
-          onChange={(e) => setFieldType(e.target.value as "text" | "number")}
-          className="mb-2 w-full rounded border px-2 py-1 text-sm"
-        >
-          <option value="text">Text</option>
-          <option value="number">Number</option>
-        </select>
-        {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
-        <button
+      />
+      <select
+        value={fieldType}
+        onChange={(e) => setFieldType(e.target.value as "text" | "number")}
+        className="mb-2 w-full rounded border px-2 py-1 text-sm"
+      >
+        <option value="text">Text</option>
+        <option value="number">Number</option>
+      </select>
+      {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+      <button
           type="submit"
           className="w-full rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-700 cursor-pointer"
-          disabled={isAdding}
-        >
-          {isAdding ? "Adding..." : "Add Field"}
-        </button>
+        disabled={isAdding}
+      >
+        {isAdding ? "Adding..." : "Add Field"}
+      </button>
       </form>
     </div>
   );

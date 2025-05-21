@@ -427,28 +427,55 @@ export default function BasePage() {
   });
 
   // Effect to process tableData and update local state
+  /**
+   * This effect handles processing the raw API response data (tableData) into the 
+   * format needed for rendering in our table. It runs whenever tableData changes.
+   * 
+   * Key responsibilities:
+   * 1. Combining data from all pages of the infinite query
+   * 2. Filtering out deleted rows
+   * 3. Applying pending edits from the editedCellsRef
+   * 4. Updating local state and references
+   * 5. Resetting loading states
+   */
   useEffect(() => {
     if (tableData) {
-      // Combine all rows from all pages of the infinite query
+      // Step 1: Combine all rows from all pages of the infinite query
+      // The flatMap() merges rows from all pages into a single array
       const allRows = tableData.pages.flatMap((page) => page.rows);
+      
+      // Step 2: Process each row - filter deleted rows and format data
       const formattedData = allRows
-        .filter((row) => !deletedRowIdsRef.current.has(row.id)) // Filter out deleted rows
+        // Filter out any rows that have been marked as deleted
+        // deletedRowIdsRef tracks rows deleted during the current session
+        .filter((row) => !deletedRowIdsRef.current.has(row.id)) 
+        
+        // Step 3: Transform each row object into our RecordRow format
         .map((row) => {
+          // Create a new row object with the ID and all data fields
           const rowData: RecordRow = {
             id: row.id,
+            // Spread the row data as key-value pairs into the object
+            // This converts the API row format to our internal format
             ...(row.data as Record<string, string | number | null>),
           };
 
-          // Apply any pending edits to this row from the editedCellsRef
+          // Step 4: Apply any pending unsaved edits to this row
+          // This ensures users immediately see their changes even before API save completes
           const rowId = row.id;
           if (rowId) {
+            // Iterate through all pending edits in editedCellsRef
             for (const [key, value] of editedCellsRef.current.entries()) {
+              // Each key is formatted as "rowId|columnName"
               const [editedRowId, columnName] = key.split("|");
+              
+              // If this edit applies to the current row, apply it to the row data
               if (
                 editedRowId === rowId &&
                 columnName &&
                 typeof columnName === "string"
               ) {
+                // Override the API data with the locally edited value
                 rowData[columnName] = value.value;
               }
             }
@@ -457,17 +484,26 @@ export default function BasePage() {
           return rowData;
         });
 
-      // Update the data state
+      // Step 5: Update React state with the processed data
       setData(formattedData);
+      
+      // Also update our ref for direct access outside of render cycles
+      // This is important for async operations that need current data
       dataRef.current = formattedData;
 
-      // Clear loading states
+      // Step 6: Clear loading states now that data is ready
       setIsInitialLoading(false);
       isLoadingMoreRef.current = false;
     }
   }, [tableData]);
 
   // Initialize dataRef when data changes
+  /**
+   * This secondary effect ensures dataRef always contains the latest data.
+   * It runs whenever the data state changes, including from local edits.
+   * The ref provides a way to access current data in callbacks without
+   * causing dependency issues or re-renders.
+   */
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
@@ -527,23 +563,33 @@ export default function BasePage() {
     [tableId, deleteRowMutation]
   );
   
-  // -----------------------------------------------------------------------
+   // -----------------------------------------------------------------------
   // Build Columns (Prepending the row number column)
   // -----------------------------------------------------------------------
   
-  // Define table columns structure with proper typing
+  /**
+   * Defines the structure of table columns using TanStack Table's AccessorKeyColumnDef, defines how each column should behave and render.
+   * 
+   * This useMemo block:
+   * 1. Creates a special first column for row numbers and selection
+   * 2. Transforms the data columns from our backend into the format required by TanStack Table
+   * 3. Handles column visibility (hiding/showing columns)
+   * 4. Sets up the rendering for column headers and cell contents
+   */
   const columns: AccessorKeyColumnDef<RecordRow, ColumnValue>[] =
     useMemo(() => {
-      // Return empty array if no data is available
+      // If we don't have any table data yet, return an empty array
       if (!tableData?.pages[0])
         return [] as AccessorKeyColumnDef<RecordRow, ColumnValue>[];
       
-      // Create a special row number column as the first column
+      // ---------------------------------------------------------------------------
+      // Step 1: Create the special row number/selection column that appears first
+      // ---------------------------------------------------------------------------
       const rowNumberColumn: AccessorKeyColumnDef<RecordRow, ColumnValue> = {
-        accessorKey: "rowNumber", // Identifier for the column
-        id: "rowNumber",
+        accessorKey: "rowNumber", // Unique identifier for this column
+        id: "rowNumber",          // ID used by TanStack Table for this column
         header: () => (
-          // Render a checkbox in the header for row selection
+          // The header cell contains a checkbox for selecting all rows (not yet implemented)
           <div className="flex h-full w-full items-center justify-center">
             <input
               type="checkbox"
@@ -551,28 +597,37 @@ export default function BasePage() {
             />
           </div>
         ),
-        size: 80, // Fixed width for row number column
-        enableResizing: false, // Prevent resizing
+        size: 80,               // Fixed width in pixels
+        enableResizing: false,  // Prevents users from resizing this column
         cell: ({ row }: { row: Row<RecordRow> }) => (
-          // Render row number and row operations
+          // Each row's cell contains the row number and a delete button
           <TableRowNumberCell
-            index={row.index}
-            onDeleteRow={() => handleDeleteRow(row.original.id ?? "")}
+            index={row.index}                               // Pass the row index (0-based)
+            onDeleteRow={() => handleDeleteRow(row.original.id ?? "")} // Pass delete handler
           />
         ),
       };
 
-      // Get the current column definitions from the fetched data
+      // ---------------------------------------------------------------------------
+      // Step 2: Get column metadata from the first page of table data
+      // ---------------------------------------------------------------------------
       const currentData = tableData.pages[0];
       
-      // Transform column definitions to TanStack Table format
+      // ---------------------------------------------------------------------------
+      // Step 3: Transform the backend column definitions into TanStack Table format
+      // ---------------------------------------------------------------------------
       const dataColumns = (currentData.columns ?? [])
-        .filter((col: TableColumn) => !hiddenColumns.has(col.name)) // Filter out hidden columns
+        // Filter out any columns that should be hidden based on user preferences
+        .filter((col: TableColumn) => !hiddenColumns.has(col.name))
+        // Transform each remaining column into the required format
         .map((col: TableColumn) => ({
-          accessorKey: col.name, // Use column name as the accessor key
-          meta: { type: col.type as "text" | "number" }, // Store column type as metadata
+          accessorKey: col.name,  // The column name is used as the key to access data
+          meta: { 
+            type: col.type as "text" | "number" // Store the column type as metadata
+          },
           header: () => (
-            // Render custom column header with delete functionality
+            // Render a custom header component for each column
+            // This includes the column name and a delete button
             <TableColumnHeader
               name={col.name}
               onDelete={() => handleDeleteColumn(col.name)}
@@ -580,42 +635,46 @@ export default function BasePage() {
             />
           ),
           cell: (props: CellContext<RecordRow, ColumnValue>) => (
-            // Render cell with custom renderer that handles editing
+            // Render a custom cell component for displaying and editing data
             <TableCellRenderer
-              {...props}
-              keyName={col.name}
-              fieldType={col.type as "text" | "number"}
-              selectedCell={selectedCell}
-              setSelectedCell={setSelectedCell}
-              setData={setData}
-              tableId={tableId}
-              setIsSaving={setIsSaving}
-              updateCellMutation={updateCellMutation}
-              searchQuery={searchQuery}
-              editedCellsRef={editedCellsRef}
-              activeFilter={activeFilter}
-              activeSort={activeSort}
+              {...props}                        // Pass all original props
+              keyName={col.name}                // Column name for this cell
+              fieldType={col.type as "text" | "number"}  // Data type
+              selectedCell={selectedCell}       // Currently selected cell info
+              setSelectedCell={setSelectedCell} // Function to select a cell
+              setData={setData}                 // Function to update table data
+              tableId={tableId}                 // Current table ID
+              setIsSaving={setIsSaving}         // Function to toggle saving state
+              updateCellMutation={updateCellMutation} // Mutation for saving changes
+              searchQuery={searchQuery}         // Current search term
+              editedCellsRef={editedCellsRef}   // Ref for tracking unsaved edits
+              activeFilter={activeFilter}       // Current filter settings
+              activeSort={activeSort}           // Current sort settings
             />
           ),
         }));
         
-      // Return combined array with row number column first, followed by data columns
+      // ---------------------------------------------------------------------------
+      // Step 4: Combine the row number column with all data columns
+      // ---------------------------------------------------------------------------
+      // The row number column is first, followed by all the data columns
       return [rowNumberColumn, ...(dataColumns ?? [])];
     }, [
-      tableData,
-      handleDeleteColumn,
-      handleDeleteRow,
-      selectedCell,
-      setSelectedCell,
-      setData,
-      tableId,
-      setIsSaving,
-      updateCellMutation,
-      searchQuery,
-      editedCellsRef,
-      activeFilter,
-      activeSort,
-      hiddenColumns, // Include hiddenColumns to recalculate when visibility changes
+      // Dependencies for this useMemo - when any of these change, columns will be recalculated
+      tableData,               // Recalculate when table data changes
+      handleDeleteColumn,      // Recalculate when column deletion handler changes
+      handleDeleteRow,         // Recalculate when row deletion handler changes
+      selectedCell,            // Recalculate when selected cell changes
+      setSelectedCell,         // Recalculate when cell selection handler changes
+      setData,                 // Recalculate when data update handler changes
+      tableId,                 // Recalculate when active table changes
+      setIsSaving,             // Recalculate when saving state setter changes
+      updateCellMutation,      // Recalculate when cell update mutation changes
+      searchQuery,             // Recalculate when search query changes
+      editedCellsRef,          // Recalculate when edited cells reference changes
+      activeFilter,            // Recalculate when filter changes
+      activeSort,              // Recalculate when sort changes
+      hiddenColumns,           // Recalculate when hidden columns change
     ]);
   
   // -----------------------------------------------------------------------
@@ -899,31 +958,59 @@ export default function BasePage() {
   // Table Initialization & Virtualization
   // -----------------------------------------------------------------------
   
-  // Initialize the TanStack table with our data and columns
+  /**
+   * Table initialization using TanStack Table (formerly React Table)
+   * 
+   * The table object holds all the state and logic for the data grid:
+   * - Row and column management
+   * - Sorting, filtering, and pagination logic
+   * - Cell selection and interaction handling
+   */
   const table = useReactTable({
-    data, // The rows data
-    columns, // Column definitions
-    getCoreRowModel: getCoreRowModel(), // Basic row model processor
-    getRowId: (row) => row.id ?? faker.string.uuid(), // Unique row identifier
-    columnResizeMode: "onChange", // Allow column resizing
+    data, // Our processed data rows from the API and local edits
+    columns, // Column definitions we created in the useMemo above
+    getCoreRowModel: getCoreRowModel(), // Processes data into rows and applies basic operations
+    getRowId: (row) => row.id ?? faker.string.uuid(), // Function to extract unique ID for each row
+                                                      // If no ID exists, generate one with faker
+    columnResizeMode: "onChange", // Updates column widths as the user drags, not just on release
   });
 
-  // Set up virtualization for efficient rendering of large data sets
-  // This only renders visible rows plus a small buffer, greatly improving performance
+  /**
+   * Virtualization implementation using TanStack Virtual
+   * 
+   * Virtualization is critical for performance with large datasets:
+   * - Only renders rows visible in the viewport plus a small buffer zone
+   * - As the user scrolls, components are recycled rather than creating new DOM elements
+   * - This keeps DOM size small and prevents memory/performance issues with large tables
+   * - The virtualizer maintains a "virtual" representation of all items and their positions
+   */
   const rowVirtualizer = useVirtualizer({
-    count: table.getRowModel().rows.length, // Total number of rows
-    getScrollElement: () => parentRef.current, // Container element to track scrolling
-    estimateSize: () => 35, // Estimated row height in pixels
-    overscan: 25, // Number of rows to render beyond visible area
+    // Configuration for the virtualizer
+    count: table.getRowModel().rows.length, // Total number of rows to virtualize
+    getScrollElement: () => parentRef.current, // The scrollable container reference
+    estimateSize: () => 35, // Estimated height of each row in pixels
+                           // Used to calculate total scroll area before actual rendering
+    overscan: 25, // Number of extra rows to render above/below the visible area
+                 // Higher values reduce blank areas when scrolling fast but use more memory
+    
+    /**
+     * Change handler for implementing infinite scroll
+     * This function runs whenever the scroll position changes
+     * It detects when the user is approaching the end of loaded data and loads more
+     */
     onChange: (virtualizer) => {
-      // Handle infinite scrolling - load more data when approaching the end
+      // Get the last visible item in the viewport
       const lastItem = virtualizer.getVirtualItems().slice(-1)[0];
+      
+      // Check if we need to load more data
       if (
-        lastItem &&
-        lastItem.index >= data.length - 10 && // When within 10 rows of the end
-        hasNextPage &&
-        !isFetchingNextPage
+        lastItem && // If there is a last item
+        lastItem.index >= data.length - 10 && // And we're within 10 rows of the end
+        hasNextPage && // And there is more data to load
+        !isFetchingNextPage // And we're not already loading data
       ) {
+        // Fetch the next page of data
+        // 'void' operator discards the Promise to avoid React warnings about unhandled promises
         void fetchNextPage();
       }
     },
@@ -991,77 +1078,119 @@ export default function BasePage() {
           onViewSelect={handleViewSelect}
         />
 
-        {/* Table Body - The main data grid */}
+        {/* Table Body - The main data grid. This container handles the main data display area and adjusts based on sidebar state */}
         <div
           className={`h-full transition-all duration-300 ease-in-out ${
-            // If the views sidebar is open, translate the table to the right
+            // If the views sidebar is open, translate the table to the right with padding
+            // This creates the sliding effect when the sidebar opens/closes
             isViewsSidebarOpen ? "pl-64" : "pl-0"
           }`}
-          onClick={() => setSelectedCell(null)} // Clear cell selection on background click
+          onClick={() => setSelectedCell(null)} // Clear any active cell selection when clicking the background
         >
-          {/* Loading state for initial data fetch */}
+          {/* 
+            Loading state display
+            Shows a spinner when any of these conditions are true:
+            - Initial data loading (first fetch)
+            - Base metadata is loading
+            - Tables list is loading
+          */}
           {isInitialLoading || isBaseLoading || isTablesLoading ? (
             <div className="flex h-full items-center justify-center">
               <Loader2 className="mr-2 h-6 w-6 animate-spin text-gray-400" />
               <span className="text-gray-600">Loading table data...</span>
             </div>
           ) : (
+            /* 
+              Main scrollable container for the table
+              This is where the virtualization happens
+              parentRef connects to the virtualizer for scroll position tracking
+            */
             <div
               ref={parentRef} // Reference for virtualization and scroll tracking
-              className="h-full overflow-auto"
-              onClick={() => setSelectedCell(null)} // Clear cell selection on click
+              className="h-full overflow-auto" // Enable scrolling when content exceeds container
+              onClick={() => setSelectedCell(null)} // Clear cell selection when clicking empty areas
             >
-              {/* Table Container with minimum width to prevent squishing */}
+              {/* 
+                Table container with minimum width
+                Prevents the table from becoming too narrow on small screens
+              */}
               <div className="inline-block min-w-[800px]">
-                {/* Table Header Row - Fixed position while scrolling */}
+                {/* 
+                  Table Header Row
+                  - sticky: keeps header visible during scrolling
+                  - z-10: ensures header stays above table content
+                  - w-max: allows header to expand to the full width of all columns
+                */}
                 <div className="sticky top-0 z-10 flex w-max bg-[#f4f4f4] text-sm text-gray-800">
                   <div className="flex">
-                    {/* Render column headers */}
+                    {/* 
+                      Render column headers from the TanStack table model
+                      1. Map through each header group (typically just one in this case)
+                      2. For each header group, map through individual headers
+                      3. Each header represents one column in the table
+                    */}
                     {table.getHeaderGroups().map((headerGroup) => (
                       <div key={headerGroup.id} className="flex">
                         {headerGroup.headers.map((header) => (
                           <div
                             key={header.id}
                             style={{
-                              width: `${header.getSize()}px`,
-                              minWidth: `${header.getSize()}px`,
-                              height: "30px",
+                              width: `${header.getSize()}px`, // Dynamic width based on column size
+                              minWidth: `${header.getSize()}px`, // Maintain minimum width
+                              height: "30px", // Fixed header height
                             }}
                             className="border-r border-b border-gray-200 px-3 py-1 text-left"
                           >
-                            {/* Render header content using TanStack's flexRender */}
+                            {/* 
+                              Render the column header content
+                              flexRender is a TanStack utility that handles rendering
+                              custom header components defined in the columns array
+                            */}
                             {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
+                              header.column.columnDef.header, // The header component or content
+                              header.getContext() // Context data for the header
                             )}
                           </div>
                         ))}
                       </div>
                     ))}
-                    {/* Add field column - Button to add new columns */}
+                    {/* 
+                      Add Field Button Column
+                      This is an extra column at the end of the table for adding new fields/columns
+                    */}
                     <div
                       className="border-b border-r border-gray-200 px-3 py-1 text-left"
                       style={{
-                        width: "90px",
+                        width: "90px", // Fixed width for the add column button
                         minWidth: "90px",
-                        height: "30px",
+                        height: "30px", // Match height with other headers
                       }}
                     >
+                      {/* 
+                        Add Field Button
+                        Toggles the field creation modal
+                        Disabled when a column is currently being added
+                      */}
                       <button
                         onClick={() => {
                           if (!isAddingColumn) {
-                            setIsFieldModalOpen(!isFieldModalOpen);
+                            setIsFieldModalOpen(!isFieldModalOpen); // Toggle modal visibility
                           }
                         }}
                         className="flex h-full w-full items-center justify-center text-lg font-medium text-gray-600 hover:text-gray-900 cursor-pointer"
-                        disabled={isAddingColumn}
-                        style={{ caretColor: 'transparent' }}
+                        disabled={isAddingColumn} // Prevent clicking while adding a column
+                        style={{ caretColor: 'transparent' }} // Hide text cursor
                       >
-                        {isAddingColumn ? "..." : "+"}
+                        {isAddingColumn ? "..." : "+"} {/* Show ... when loading, + when ready */}
                       </button>
-                      {/* Field addition modal */}
+                      {/* 
+                        Field Addition Modal
+                        Only shown when isFieldModalOpen is true
+                        Contains form controls for adding a new column to the table
+                      */}
                       {isFieldModalOpen && (
                         <div ref={addFieldModalRef} className="absolute z-10 mt-2 w-64 rounded border bg-white p-4 shadow-md">
+                          {/* Modal header with title and close button */}
                           <div className="flex justify-between mb-2">
                             <h3 className="text-sm font-medium">Add new field</h3>
                             <button 
@@ -1069,21 +1198,31 @@ export default function BasePage() {
                               className="text-gray-500 hover:text-gray-700 cursor-pointer"
                               type="button"
                             >
-                              &times;
+                              &times; {/* × character for close button */}
                             </button>
                           </div>
+                          {/* 
+                            Field name input
+                            Captures the name for the new column
+                            Clears error message when user types
+                          */}
                           <input
                             type="text"
                             placeholder="Field name"
                             value={newFieldName}
                             onChange={(e) => {
                               setNewFieldName(e.target.value);
-                              // Clear error when typing
+                              // Clear error when typing to provide immediate feedback
                               setFieldError("");
                             }}
                             className="mb-2 w-full rounded border px-2 py-1 text-sm"
-                            autoFocus
+                            autoFocus // Automatically focus this input when modal opens
                           />
+                          {/* 
+                            Field type selector
+                            Allows choosing between text and number data types
+                            Additional types could be added here in the future
+                          */}
                           <select
                             value={newFieldType}
                             onChange={(e) =>
@@ -1096,12 +1235,21 @@ export default function BasePage() {
                             <option value="text">Text</option>
                             <option value="number">Number</option>
                           </select>
-                          {/* Show only one error message from fieldError state */}
+                          {/* 
+                            Error message display
+                            Only shown when there's a validation error
+                            Helps user understand why they can't add the field
+                          */}
                           {fieldError && (
                             <p className="mb-2 text-xs text-red-600">
                               {fieldError}
                             </p>
                           )}
+                          {/* 
+                            Add Field button
+                            Triggers the handleAddColumn function
+                            Disabled during the column addition process
+                          */}
                           <button
                             onClick={handleAddColumn}
                             className="w-full rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-700 cursor-pointer"
@@ -1122,33 +1270,49 @@ export default function BasePage() {
                     position: "relative", // Required for absolute positioning of rows
                   }}
                 >
-                  {/* Map over only the visible virtual rows */}
+                  {/* 
+                    How the virtualization works:
+                    1. rowVirtualizer.getVirtualItems() returns only the currently visible rows
+                    2. Each row is positioned absolutely based on its virtual position
+                    3. As the user scrolls, rows are recycled rather than creating new DOM elements
+                    4. This dramatically improves performance for large datasets
+                  */}
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                     const row = table.getRowModel().rows[virtualRow.index];
-                    if (!row) return null;
+                    if (!row) return null; // Skip if row doesn't exist in the data
                     return (
                       <div
                         key={row.id ?? virtualRow.index}
                         style={{
-                          position: "absolute", // Position rows absolutely
-                          top: 0,
-                          transform: `translateY(${virtualRow.start}px)`, // Position based on scroll
-                          height: "35px",
+                          position: "absolute", // Position rows absolutely within the container
+                          top: 0, // Start from the top
+                          transform: `translateY(${virtualRow.start}px)`, // Position based on scroll offset
+                          height: "35px", // Fixed row height
                         }}
                         className="flex border-b border-gray-200"
                       >
-                        {/* Render cells for this row */}
+                        {/* 
+                          Render each cell in this row
+                          Uses TanStack Table's cell model to ensure correct data display
+                        */}
                         {row.getVisibleCells().map((cell) => (
                           <div
                             key={cell.id}
                             style={{
-                              width: `${cell.column.getSize()}px`,
-                              minWidth: `${cell.column.getSize()}px`,
-                              height: "100%",
+                              width: `${cell.column.getSize()}px`, // Match cell width to column width
+                              minWidth: `${cell.column.getSize()}px`, // Ensure minimum width
+                              height: "100%", // Fill the row height
                             }}
                             className="border-r border-gray-200"
                           >
-                            {/* Render cell content using TanStack's flexRender */}
+                            {/* 
+                              Render cell content using flexRender
+                              This uses the CellRenderer component defined in the columns array
+                              Cell renderer handles:
+                              - Display formatting based on data type
+                              - Cell selection and editing interactions
+                              - Highlighting search matches
+                            */}
                             {flexRender(
                               cell.column.columnDef.cell,
                               cell.getContext()
@@ -1161,7 +1325,11 @@ export default function BasePage() {
                 </div>
               </div>
 
-              {/* Loading indicator for pagination during infinite scroll */}
+              {/* 
+                Loading indicator for infinite scrolling
+                Appears at the bottom when more data is being fetched
+                Only visible during pagination loading, not during initial load
+              */}
               {showLoading && (
                 <div className="sticky bottom-0 flex w-full items-center justify-center bg-white/80 py-2 shadow-md">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin text-gray-400" />
